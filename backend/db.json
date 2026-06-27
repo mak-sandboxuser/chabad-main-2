@@ -1,0 +1,206 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "email": "admin@church.org",
+      "role": "admin",
+      "createdAt": "2026-06-18T18:10:20.458Z"
+    },
+    {
+      "id": "2",
+      "email": "pastor@church.org",
+      "role": "pastor",
+      "createdAt": "2026-06-18T18:10:20.459Z"
+    },
+    {
+      "id": "3",
+      "email": "rohitjainltp59@gmail.com",
+      "role": "user",
+      "createdAt": "2026-06-18T18:10:57.521Z"
+    },
+    {
+      "id": "4",
+      "email": "rajeshrohitkumarltp@gmail.com",
+      "role": "user",
+      "createdAt": "2026-06-18T18:17:49.343Z"
+    }
+  ],
+  "usedTokens": [
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InJhamVzaHJvaGl0a3VtYXJsdHBAZ21haWwuY29tIiwidXNlcklkIjoiNCIsImlhdCI6MTc4MTgwNjgwNCwiZXhwIjoxNzgxODA3NzA0fQ.nL0Cd_gw7lRDu1Ihf23NQgdcWrPTGmu0N6akcpUCxxI",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InJhamVzaHJvaGl0a3VtYXJsdHBAZ21haWwuY29tIiwidXNlcklkIjoiNCIsImlhdCI6MTc4MTgwNjk2MywiZXhwIjoxNzgxODA3ODYzfQ.BqEFqzmJCpdSHUX5IIWFFLjGuOMIrN1mIKSBPN2iH4s"
+  ],
+  "dashboardStats": {
+    "totalMembers": 6,
+    "monthlyDonations": 12500,
+    "upcomingEventsCount": 8,
+    "activeMinistries": 14
+  },
+  "members": [
+    {
+      "id": "m1",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "role": "Member",
+      "status": "Active",
+      "joinedDate": "2024-01-15"
+    },
+    {
+      "id": "m2",
+      "name": "Jane Smith",
+      "email": "jane@example.com",
+      "role": "Choir Leader",
+      "status": "Active",
+      "joinedDate": "2023-08-22"
+    },
+    {
+      "id": "m3",
+      "name": "Robert Johnson",
+      "email": "robert@example.com",
+      "role": "Deacon",
+      "status": "Active",
+      "joinedDate": "2022-11-05"
+    },
+    {
+      "id": "m4",
+      "name": "Emily Davis",
+      "email": "emily@example.com",
+      "role": "Volunteer",
+      "status": "Inactive",
+      "joinedDate": "2025-02-10"
+    },
+    {
+      "id": "m5",
+      "name": "Michael Brown",
+      "email": "michael@example.com",
+      "role": "Member",
+      "status": "Active",
+      "joinedDate": "2024-06-30"
+    },
+    {
+      "id": "m6",
+      "name": "rohitjainltp59",
+      "email": "rohitjainltp59@gmail.com",
+      "role": "Member",
+      "status": "Active",
+      "joinedDate": "2026-06-23",
+      "financials": {
+        "totalPayments": 50,
+        "payments": [
+          {
+            "id": "p_stripe_1782194089444",
+            "amount": "$50.00",
+            "totalPledged": "$50.00",
+            "date": "2026-06-23",
+            "type": "General Donation",
+            "method": "Stripe",
+            "status": "Paid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m7",
+      "contactId": "005Jx000009VoMjIAK",
+      "name": "Mohd Ali Khan",
+      "email": "acc.appledev@gmail.com",
+      "role": "Member",
+      "status": "Active",
+      "joinedDate": "2026-06-23",
+      "profile": {
+        "accountName": "Mohd Ali Khan",
+        "phone": "(831) 925-4076",
+        "street": "667 C AZAD NAGAR NEAR NOORANI MASJID GOAL CHOURAHA",
+        "city": "INDORE",
+        "state": "Madhya Pradesh",
+        "postalCode": "452001",
+        "country": "India",
+        "householdDonationTotal": "$0.00",
+        "spiritual": {
+          "kosher": "No",
+          "hasPushka": "No",
+          "datePushkaLastEmptied": ""
+        }
+      },
+      "contacts": [
+        {
+          "id": "c_m7",
+          "name": "Mohd Ali Khan",
+          "role": "Member",
+          "isPrimary": true
+        }
+      ],
+      "relationships": [],
+      "financials": {
+        "totalPayments": 0,
+        "payments": []
+      }
+    },
+    {
+      "id": "m8",
+      "contactId": "0034100000CWFvYAAX",
+      "name": "Arik Wolf",
+      "email": "rabbi@chabadbedford.com",
+      "role": "Member",
+      "status": "Active",
+      "joinedDate": "2026-06-24",
+      "profile": {
+        "accountName": "Arik Wolf",
+        "phone": "(914) 844-7790",
+        "street": "770 Eastern Pkwy",
+        "city": "Brooklyn",
+        "state": "NY",
+        "postalCode": "11213",
+        "country": "United States",
+        "householdDonationTotal": "$0.00",
+        "spiritual": {
+          "kosher": "No",
+          "hasPushka": "No",
+          "datePushkaLastEmptied": ""
+        }
+      },
+      "contacts": [
+        {
+          "id": "c_m8",
+          "name": "Arik Wolf",
+          "role": "Member",
+          "isPrimary": true
+        }
+      ],
+      "relationships": [],
+      "financials": {
+        "totalPayments": 0,
+        "payments": []
+      }
+    }
+  ],
+  "events": [
+    {
+      "id": "e1",
+      "title": "Sunday Worship Service",
+      "date": "2026-06-21",
+      "time": "09:00 AM",
+      "location": "Main Sanctuary"
+    },
+    {
+      "id": "e2",
+      "title": "Youth Summer Camp",
+      "date": "2026-06-25",
+      "time": "08:00 AM",
+      "location": "Camp Grace"
+    },
+    {
+      "id": "e3",
+      "title": "Weekly Bible Study",
+      "date": "2026-06-24",
+      "time": "07:00 PM",
+      "location": "Fellowship Hall"
+    },
+    {
+      "id": "e4",
+      "title": "Community Outreach Drive",
+      "date": "2026-06-27",
+      "time": "10:00 AM",
+      "location": "City Park"
+    }
+  ]
+}

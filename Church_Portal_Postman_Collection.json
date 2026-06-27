@@ -1,0 +1,77 @@
+{
+	"info": {
+		"_postman_id": "766a4f5b-6f0a-4fb4-a5e2-e1d53086eb29",
+		"name": "Church Portal Integration",
+		"description": "Postman collection for testing the Church Portal authentication and profile update (Salesforce integration) endpoints.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Update Profile (Salesforce)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer dev_token_for_testing",
+						"description": "Dev backdoor token for testing updates without Clerk login session"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"rabbi@chabadbedford.com\",\n  \"firstName\": \"Arik\",\n  \"lastName\": \"Wolf\",\n  \"phone\": \"(914) 844-7777\",\n  \"street\": \"770 Eastern Pkwy\",\n  \"city\": \"Brooklyn\",\n  \"state\": \"NY\",\n  \"postalCode\": \"11213\",\n  \"country\": \"United States\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:5000/api/portal/update-profile",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"api",
+						"portal",
+						"update-profile"
+					]
+				},
+				"description": "Updates profile details in the local database and triggers the Make.com Salesforce Update Webhook."
+			},
+			"response": []
+		},
+		{
+			"name": "Check Member",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"rabbi@chabadbedford.com\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:5000/api/auth/check-member",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5000",
+					"path": [
+						"api",
+						"auth",
+						"check-member"
+					]
+				},
+				"description": "Checks if the member exists in Salesforce via Make.com and retrieves basic member details."
+			},
+			"response": []
+		}
+	]
+}
