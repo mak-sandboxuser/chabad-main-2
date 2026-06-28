@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, useUser, useClerk } from '@clerk/clerk-react';
 import { authTrace, authTraceClerkState } from './utils/authTrace';
 import { getEffectiveAuthState, tryRestoreOrClearSession } from './utils/clerkMagicLink';
+import { showToast } from './utils/toast';
 import Login from './components/Login';
 import Portal from './components/Portal';
 import EmailLinkVerifier, { shouldRunEmailLinkVerifier } from './components/EmailLinkVerifier';
+import ToastHost from './components/shared/ToastHost';
+
+const LOGIN_SUCCESS_FLAG = 'show_login_success';
 
 function LoadingScreen({ message }) {
   return (
@@ -35,7 +39,13 @@ function AuthenticatedPortal({ onLogout, resolvedUserId }) {
       try {
         const t = await getToken?.().catch(() => null)
           || await clerk.session?.getToken?.();
-        if (!cancelled) setToken(t);
+        if (!cancelled) {
+          setToken(t);
+          if (t && sessionStorage.getItem(LOGIN_SUCCESS_FLAG)) {
+            sessionStorage.removeItem(LOGIN_SUCCESS_FLAG);
+            showToast({ message: 'Welcome! You are signed in successfully.', type: 'success' });
+          }
+        }
       } catch (e) {
         console.error('Failed to get Clerk token:', e);
         if (!cancelled) setToken(null);
@@ -126,22 +136,45 @@ export default function App() {
     };
   }, [clerk, isLoaded, isSignedIn, userId, signOut]);
 
+  const handleLogout = () => {
+    sessionStorage.removeItem(LOGIN_SUCCESS_FLAG);
+    signOut();
+  };
+
   if (shouldRunEmailLinkVerifier()) {
-    return <EmailLinkVerifier />;
+    return (
+      <>
+        <ToastHost />
+        <EmailLinkVerifier />
+      </>
+    );
   }
 
   if (!isLoaded || restoringSession) {
-    return <LoadingScreen message="Loading authentication state..." />;
+    return (
+      <>
+        <ToastHost />
+        <LoadingScreen message="Loading authentication state..." />
+      </>
+    );
   }
 
   if (auth.authenticated) {
     return (
-      <AuthenticatedPortal
-        onLogout={signOut}
-        resolvedUserId={auth.effectiveUserId}
-      />
+      <>
+        <ToastHost />
+        <AuthenticatedPortal
+          onLogout={handleLogout}
+          resolvedUserId={auth.effectiveUserId}
+        />
+      </>
     );
   }
 
-  return <Login />;
+  return (
+    <>
+      <ToastHost />
+      <Login />
+    </>
+  );
 }

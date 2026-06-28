@@ -78,24 +78,57 @@
     },
     {
       "id": "m6",
-      "name": "rohitjainltp59",
+      "name": "Rohit Jain",
       "email": "rohitjainltp59@gmail.com",
       "role": "Member",
       "status": "Active",
       "joinedDate": "2026-06-23",
+      "contactId": "003Jx00001ZtMGAIA3",
       "financials": {
         "totalPayments": 50,
         "payments": [
           {
             "id": "p_stripe_1782194089444",
             "amount": "$50.00",
-            "totalPledged": "$50.00",
+            "total": "$50.00",
             "date": "2026-06-23",
-            "type": "General Donation",
+            "outstanding": "$0.00",
+            "payer": "Rohit Jain",
+            "type": "Donation",
+            "subType": "General",
             "method": "Stripe",
             "status": "Paid"
           }
-        ]
+        ],
+        "pledges": [],
+        "recurring": []
+      },
+      "profile": {
+        "accountName": "Rohit Jain",
+        "phone": "+91 9569552954",
+        "homePhone": "+91 5678876578",
+        "street": "736 civil line",
+        "city": "Lalitpur",
+        "state": "UP",
+        "postalCode": "284403",
+        "country": "India",
+        "nickname": "Rohit",
+        "title": "",
+        "lifecycle": {
+          "hebrewName": "rohit ji",
+          "fathersHebrewName": "rajesh ji",
+          "mothersHebrewName": "seema ji",
+          "jewish": "Jewish",
+          "hebrewBirthdate": "15 Tammuz, 5770",
+          "nextHebrewBirthday": "2026-06-30",
+          "weddingDate": "2026-06-23",
+          "lifecycleStatus": "Living"
+        },
+        "additional": {
+          "birthdate": "2010-06-27",
+          "age": "16",
+          "gender": "Male"
+        }
       }
     },
     {

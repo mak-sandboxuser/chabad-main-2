@@ -32,6 +32,7 @@ export default function EmailLinkVerifier() {
           status,
           createdSessionId,
         });
+        sessionStorage.setItem('show_login_success', '1');
       } catch (err) {
         authTrace('VERIFY_PAGE_FAIL', { error: getClerkErrorMessage(err) });
         console.error('Email link verification failed:', err);

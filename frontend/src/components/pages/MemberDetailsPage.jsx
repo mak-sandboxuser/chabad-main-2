@@ -4,26 +4,28 @@ import {
   Pencil, Home, ChevronRight, Trash2, User, ShieldCheck,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
+import { getInitials } from '../../utils/portalData';
 
-const MEMBER_DATA = {
-  sarah: {
-    name: 'Sarah Doe',
-    initials: 'SD',
-    relationship: 'Spouse',
-    role: 'Member',
-    roleDesc: 'Active household member with full access to member benefits.',
-    dob: 'August 24, 1982',
-    contact: 'Email',
-    email: 'sarah.doe@example.com',
-    phone: '(914) 555-1234',
-    address: '123 Bedford Road, Bedford, NY 10506, United States',
-    since: 'Jan 15, 2024',
-    months: '16 months',
-  },
-};
-
-export default function MemberDetailsPage({ theme, member, onNavigate }) {
-  const data = MEMBER_DATA[member?.id] || MEMBER_DATA.sarah;
+export default function MemberDetailsPage({ theme, member, sfData, onNavigate }) {
+  const accountName = sfData?.account?.name || sfData?.profile?.accountName || 'Household';
+  const data = {
+    name: member?.name || 'Member',
+    initials: getInitials(member?.name),
+    relationship: member?.role || 'Member',
+    role: member?.isPrimary ? 'Primary Member' : member?.isSecondary ? 'Secondary Member' : member?.role || 'Member',
+    roleDesc: member?.isPrimary
+      ? 'Primary household member with full portal access.'
+      : 'Active household member linked to this account.',
+    email: member?.email || sfData?.email || '—',
+    phone: member?.phone || sfData?.profile?.phone || '—',
+    address: [
+      sfData?.profile?.street,
+      [sfData?.profile?.city, sfData?.profile?.state, sfData?.profile?.postalCode].filter(Boolean).join(', '),
+      sfData?.profile?.country,
+    ].filter(Boolean).join(', ') || '—',
+    since: sfData?.membership?.memberSince || sfData?.joinedDate || '—',
+    contactId: member?.contactId || '—',
+  };
 
   return (
     <PortalPageLayout
@@ -33,8 +35,8 @@ export default function MemberDetailsPage({ theme, member, onNavigate }) {
       showSketch={false}
       breadcrumbs={[
         { label: 'Household', onClick: () => onNavigate('household') },
-        { label: 'Doe Family', onClick: () => onNavigate('household') },
-        { label: 'Member Details' },
+        { label: accountName, onClick: () => onNavigate('household') },
+        { label: data.name },
       ]}
     >
       <div className="member-profile-card glass-panel">
@@ -45,16 +47,18 @@ export default function MemberDetailsPage({ theme, member, onNavigate }) {
             <span className="role-badge blue"><User size={12} /> {data.relationship}</span>
             <span className="badge badge-active"><ShieldCheck size={12} /> Active Member</span>
           </div>
-          <p className="member-since"><Calendar size={14} /> Member since {data.since} • {data.months}</p>
+          <p className="member-since"><Calendar size={14} /> Member since {data.since}</p>
         </div>
-        <button type="button" className="dash-btn-outline"><Pencil size={16} /> Edit Member</button>
+        <button type="button" className="dash-btn-outline" onClick={() => onNavigate('profile')}>
+          <Pencil size={16} /> View Profile
+        </button>
       </div>
 
       <div className="member-household-link glass-panel">
         <div className="member-household-link-icon"><Home size={18} /></div>
         <div>
-          <strong>Doe Family Household</strong>
-          <p className="text-success">4 Members • Active Household</p>
+          <strong>{accountName}</strong>
+          <p className="text-success">{sfData?.contacts?.length || 1} Members • Active Household</p>
         </div>
         <button type="button" className="portal-text-link" onClick={() => onNavigate('household')}>
           View Household <ChevronRight size={14} />
@@ -64,10 +68,9 @@ export default function MemberDetailsPage({ theme, member, onNavigate }) {
       <div className="member-details-card glass-panel">
         <h3>Member Details</h3>
         {[
-          { icon: User, label: 'Relationship', value: data.relationship },
+          { icon: User, label: 'Role', value: data.relationship },
           { icon: Shield, label: 'Household Role', value: data.role, badge: true, sub: data.roleDesc },
-          { icon: Calendar, label: 'Date of Birth', value: data.dob },
-          { icon: MessageSquare, label: 'Preferred Contact Method', value: data.contact },
+          { icon: MessageSquare, label: 'Salesforce Contact ID', value: data.contactId },
           { icon: Mail, label: 'Email Address', value: data.email },
           { icon: Phone, label: 'Mobile Number', value: data.phone },
           { icon: MapPin, label: 'Mailing Address', value: data.address },
@@ -96,7 +99,7 @@ export default function MemberDetailsPage({ theme, member, onNavigate }) {
         <div className="member-danger-icon"><Trash2 size={20} /></div>
         <div>
           <strong className="text-danger">Remove from Household</strong>
-          <p>This will remove {data.name} from the Doe Family household.</p>
+          <p>This will remove {data.name} from the {accountName} household.</p>
         </div>
         <button type="button" className="btn-danger-outline">Remove Member</button>
       </div>

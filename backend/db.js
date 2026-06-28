@@ -134,30 +134,23 @@ async function getMemberByEmail(email) {
   
   const localMember = db.members.find(m => m.email.toLowerCase() === emailLower);
   if (localMember) {
-    // Return standard mock profile for other local database test members
+    const name = localMember.name || emailLower.split('@')[0];
     return {
       ...localMember,
-      profile: {
-        accountName: localMember.name,
-        phone: "(555) 123-4567",
-        street: "123 Faith Way",
-        city: "Grace Town",
-        state: "CA",
-        postalCode: "90210",
-        country: "USA",
-        householdDonationTotal: "$250.00",
-        spiritual: { kosher: "No", hasPushka: "Yes", datePushkaLastEmptied: "2026-01-01" }
+      profile: localMember.profile || {
+        accountName: name,
+        phone: '',
+        street: '',
+        city: '',
+        state: '',
+        postalCode: '',
+        country: '',
+        householdDonationTotal: '$0.00',
+        spiritual: { kosher: 'No', hasPushka: 'No', datePushkaLastEmptied: '' },
       },
-      contacts: [
-        { id: "c_l1", name: localMember.name, role: localMember.role || "Member", isPrimary: true }
-      ],
-      relationships: [],
-      financials: {
-        totalPayments: 100.00,
-        payments: [
-          { id: "p_l1", amount: "$100.00", totalPledged: "$100.00", date: "2026-05-01", type: "General Offering", method: "Credit Card", status: "Paid" }
-        ]
-      }
+      contacts: localMember.syncedFromSalesforce ? (localMember.contacts || []) : [],
+      relationships: localMember.syncedFromSalesforce ? (localMember.relationships || []) : [],
+      financials: localMember.financials || { totalPayments: 0, payments: [], pledges: [], recurring: [] },
     };
   }
   
@@ -275,24 +268,108 @@ async function updateMemberProfile(email, profileData, contactId) {
   localMember.profile = {
     ...localMember.profile,
     accountName: localMember.name,
-    phone: profileData.phone || localMember.profile.phone || "",
-    street: profileData.street || localMember.profile.street || "",
-    city: profileData.city || localMember.profile.city || "",
-    state: profileData.state || localMember.profile.state || "",
-    postalCode: profileData.postalCode || localMember.profile.postalCode || "",
-    country: profileData.country || localMember.profile.country || "",
+    phone: profileData.phone || localMember.profile.phone || '',
+    homePhone: profileData.homePhone || localMember.profile.homePhone || '',
+    street: profileData.street || localMember.profile.street || '',
+    city: profileData.city || localMember.profile.city || '',
+    state: profileData.state || localMember.profile.state || '',
+    postalCode: profileData.postalCode || localMember.profile.postalCode || '',
+    country: profileData.country || localMember.profile.country || '',
+    nickname: profileData.nickname || localMember.profile.nickname || '',
+    title: profileData.title || localMember.profile.title || '',
+    lifecycle: {
+      ...(localMember.profile.lifecycle || {}),
+      hebrewName: profileData.hebrewName || localMember.profile.lifecycle?.hebrewName || '',
+      fathersHebrewName: profileData.fathersHebrewName || localMember.profile.lifecycle?.fathersHebrewName || '',
+      mothersHebrewName: profileData.mothersHebrewName || localMember.profile.lifecycle?.mothersHebrewName || '',
+      jewish: profileData.jewish || localMember.profile.lifecycle?.jewish || '',
+      hebrewBirthdate: profileData.hebrewBirthdate || localMember.profile.lifecycle?.hebrewBirthdate || '',
+      nextHebrewBirthday: profileData.nextHebrewBirthday || localMember.profile.lifecycle?.nextHebrewBirthday || '',
+      weddingDate: profileData.weddingDate || localMember.profile.lifecycle?.weddingDate || '',
+      lifecycleStatus: profileData.lifecycleStatus || localMember.profile.lifecycle?.lifecycleStatus || '',
+    },
+    additional: {
+      ...(localMember.profile.additional || {}),
+      birthdate: profileData.birthdate || localMember.profile.additional?.birthdate || '',
+      age: profileData.age || localMember.profile.additional?.age || '',
+      gender: profileData.gender || localMember.profile.additional?.gender || '',
+    },
   };
 
   await writeDb(db);
 
+  const firstName = profileData.firstName || localMember.name?.split(/\s+/)[0] || '';
+  const lastName = profileData.lastName || localMember.name?.split(/\s+/).slice(1).join(' ') || '';
+
   return {
     ...localMember,
+    firstName,
+    lastName,
     contacts: localMember.contacts || [
-      { id: "c_" + localMember.id, name: localMember.name, role: localMember.role || "Member", isPrimary: true }
+      { id: 'c_' + localMember.id, name: localMember.name, role: localMember.role || 'Member', isPrimary: true }
     ],
     relationships: localMember.relationships || [],
-    financials: localMember.financials || { totalPayments: 0, payments: [] }
+    financials: localMember.financials || { totalPayments: 0, payments: [], pledges: [], recurring: [] },
   };
+}
+
+async function syncPortalData(email, portalData, contactId = '') {
+  const db = await readDb();
+  const emailLower = email.toLowerCase();
+  let localMember = db.members.find((m) => m.email.toLowerCase() === emailLower);
+
+  if (!localMember) {
+    localMember = {
+      id: 'm' + (db.members.length + 1),
+      name: portalData.accountName || email.split('@')[0],
+      email: emailLower,
+      role: 'Member',
+      status: 'Active',
+      joinedDate: new Date().toISOString().split('T')[0],
+    };
+    db.members.push(localMember);
+  }
+
+  if (contactId) localMember.contactId = contactId;
+  if (portalData.fromSalesforce) localMember.syncedFromSalesforce = true;
+  if (portalData.accountId) localMember.accountId = portalData.accountId;
+  if (portalData.accountName) {
+    localMember.name = portalData.accountName;
+    localMember.profile = {
+      ...(localMember.profile || {}),
+      accountName: portalData.accountName,
+      phone: portalData.phone || localMember.profile?.phone || '',
+      street: portalData.street || localMember.profile?.street || '',
+      city: portalData.city || localMember.profile?.city || '',
+      state: portalData.state || localMember.profile?.state || '',
+      postalCode: portalData.postalCode || localMember.profile?.postalCode || '',
+      country: portalData.country || localMember.profile?.country || '',
+    };
+  }
+
+  if (Array.isArray(portalData.contacts) && portalData.contacts.length) {
+    localMember.contacts = portalData.contacts;
+  }
+  if (Array.isArray(portalData.relationships) && portalData.relationships.length) {
+    localMember.relationships = portalData.relationships;
+  }
+  if (portalData.membership) {
+    localMember.membership = portalData.membership;
+  }
+
+  localMember.financials = {
+    ...(localMember.financials || { totalPayments: 0, payments: [] }),
+    payments: portalData.payments?.length ? portalData.payments : (localMember.financials?.payments || []),
+    pledges: portalData.pledges?.length ? portalData.pledges : (localMember.financials?.pledges || []),
+    recurring: portalData.recurring?.length ? portalData.recurring : (localMember.financials?.recurring || []),
+  };
+  localMember.financials.totalPayments = localMember.financials.payments.reduce((sum, item) => {
+    const amount = parseFloat(String(item.amount || '').replace(/[^0-9.-]/g, '')) || 0;
+    return sum + amount;
+  }, 0);
+
+  await writeDb(db);
+  return localMember;
 }
 
 async function getDashboardData() {
@@ -312,5 +389,6 @@ module.exports = {
   getDashboardData,
   getMemberByEmail,
   recordPayment,
-  updateMemberProfile
+  updateMemberProfile,
+  syncPortalData,
 };

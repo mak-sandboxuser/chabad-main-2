@@ -1,125 +1,125 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  Home, Users, ShieldCheck, Calendar, RefreshCw,
-  Plus, Pencil, CreditCard, Crown, ChevronRight, MapPin, User, Phone, Mail,
+  Home, Users, User, Phone, Mail, MapPin, Lock,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
+import SectionTabs from '../shared/SectionTabs';
+import ContactsTable from '../shared/ContactsTable';
+import DataTable from '../shared/DataTable';
+import {
+  formatAddress,
+  formatDisplayDate,
+  getAccount,
+  getContacts,
+  getRelationships,
+} from '../../utils/portalData';
 
-const MEMBERS = [
-  { id: 'john', name: 'John Doe', initials: 'JD', role: 'Primary Member', tagClass: 'owner', icon: Crown },
-  { id: 'sarah', name: 'Sarah Doe', initials: 'SD', role: 'Spouse', tagClass: 'relation' },
-  { id: 'levi', name: 'Levi Doe', initials: 'LD', role: 'Child', tagClass: 'relation' },
-  { id: 'miriam', name: 'Miriam Doe', initials: 'MD', role: 'Child', tagClass: 'relation' },
+const TABS = [
+  { id: 'profile', label: 'Profile', icon: Home },
+  { id: 'contacts', label: 'Contacts', icon: Users },
+  { id: 'relationships', label: 'Relationships', icon: User },
 ];
 
-export default function HouseholdPage({ theme, sfData, onNavigate, onViewMember }) {
-  const householdName = sfData?.profile?.accountName || 'Doe Family Household';
-  const primaryName = sfData?.name || 'John Doe';
+export default function HouseholdPage({ theme, sfData, onNavigate, onViewMember, onDonate }) {
+  const [activeTab, setActiveTab] = useState('contacts');
+  const account = getAccount(sfData);
+  const contacts = getContacts(sfData);
+  const relationships = getRelationships(sfData);
+  const primaryContact = contacts.find((c) => c.isPrimary) || contacts[0];
 
   return (
     <PortalPageLayout
       theme={theme}
-      title="Household Overview"
-      subtitle="Manage your household and members."
+      title={account.name}
+      subtitle="Household profile, contacts, and relationships."
+      breadcrumbs={[
+        { label: 'Dashboard', onClick: () => onNavigate('dashboard') },
+        { label: 'Household' },
+      ]}
       showSketch={false}
     >
-      <div className="household-summary-banner glass-panel">
-        <div className="household-summary-left">
-          <div className="household-summary-icon"><Home size={28} /></div>
+      <div className="account-header-card glass-panel">
+        <div className="account-header-main">
+          <div className="account-header-icon"><Home size={24} /></div>
           <div>
-            <h3>{householdName}</h3>
-            <span className="badge badge-active">Active Household</span>
-            <div className="household-summary-meta">
-              <span><Users size={14} /> 4 Members</span>
-              <span>Member Since Jan 15, 2024</span>
-              <span>Primary Member: {primaryName}</span>
+            <span className="account-header-type">Account</span>
+            <h2>{account.name}</h2>
+            <div className="account-header-meta">
+              {account.phone && <span><Phone size={14} /> {account.phone}</span>}
+              {account.email && <span><Mail size={14} /> {account.email}</span>}
+              <span><MapPin size={14} /> {formatAddress(account)}</span>
             </div>
           </div>
         </div>
-        <div className="household-summary-actions">
-          <button type="button" className="dash-btn-gold"><Plus size={16} /> Add Family Member</button>
-          <button type="button" className="dash-btn-outline"><Pencil size={16} /> Edit Household</button>
-          <button type="button" className="dash-btn-outline" onClick={() => onNavigate('membership')}>
-            <CreditCard size={16} /> View Membership
+        <div className="account-header-actions">
+          <button type="button" className="dash-btn-gold" onClick={onDonate}>
+            <Lock size={16} /> Quick Payment
           </button>
         </div>
       </div>
 
-      <div className="dash-stat-row household-metrics">
-        {[
-          { label: 'Total Members', value: '4', sub: '2 Adults • 2 Children', icon: Users },
-          { label: 'Household Status', value: 'Active', sub: 'In good standing', icon: ShieldCheck, valueClass: 'text-success' },
-          { label: 'Member Since', value: 'Jan 15, 2024', sub: '16 months', icon: Calendar },
-          { label: 'Next Renewal', value: 'Jan 1, 2026', sub: '152 days remaining', icon: RefreshCw, subClass: 'text-warn' },
-        ].map((s) => {
-          const Icon = s.icon;
-          return (
-            <div key={s.label} className="dash-stat-card glass-panel static">
-              <Icon size={18} className="membership-stat-icon" />
-              <span className="dash-stat-label">{s.label}</span>
-              <strong className={s.valueClass}>{s.value}</strong>
-              <small className={s.subClass}>{s.sub}</small>
-            </div>
-          );
-        })}
-      </div>
+      <div className="section-card glass-panel">
+        <SectionTabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 
-      <div className="dash-panel glass-panel">
-        <div className="dash-panel-header">
-          <div>
-            <h3>Household Members</h3>
-            <p className="panel-subtitle">The people in your household.</p>
-          </div>
-        </div>
-        <ul className="household-member-list">
-          {MEMBERS.map((m) => (
-            <li key={m.id}>
-              <button type="button" className="household-member-row" onClick={() => onViewMember(m)}>
-                <div className="dash-household-avatar">{m.initials}</div>
-                <span className="household-member-name">{m.name}</span>
-                <span className={`dash-role-tag ${m.tagClass}`}>
-                  {m.icon && <Crown size={12} />} {m.role}
-                </span>
-                <ChevronRight size={18} className="row-chevron" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+        <div className="section-panel section-panel--flush">
+          {activeTab === 'profile' && (
+            <div className="profile-tab-form-grid section-panel-inner">
+              <div className="profile-field">
+                <label className="profile-field-label">Account Name</label>
+                <div className="profile-field-box">{account.name}</div>
+              </div>
+              <div className="profile-field">
+                <label className="profile-field-label">Phone</label>
+                <div className="profile-field-box">{account.phone || '—'}</div>
+              </div>
+              <div className="profile-field profile-field--full">
+                <label className="profile-field-label">Shipping Address</label>
+                <div className="profile-field-box">{formatAddress(account)}</div>
+              </div>
+              <div className="profile-field">
+                <label className="profile-field-label">Primary Member</label>
+                <div className="profile-field-box">{primaryContact?.name || sfData?.name || '—'}</div>
+              </div>
+              <div className="profile-field">
+                <label className="profile-field-label">Member Since</label>
+                <div className="profile-field-box">{formatDisplayDate(sfData?.membership?.memberSince || sfData?.joinedDate)}</div>
+              </div>
+              <div className="profile-field">
+                <label className="profile-field-label">Household Members</label>
+                <div className="profile-field-box">{contacts.length}</div>
+              </div>
+              <div className="profile-field">
+                <label className="profile-field-label">Salesforce Contact ID</label>
+                <div className="profile-field-box">{sfData?.contactId || '—'}</div>
+              </div>
+            </div>
+          )}
 
-      <div className="dash-panel glass-panel">
-        <h3>Household Information</h3>
-        <div className="household-info-grid">
-          <div className="household-info-item">
-            <MapPin size={18} />
-            <div>
-              <span className="info-label">Address</span>
-              <p>{sfData?.profile?.street || '123 Bedford Road'}, {sfData?.profile?.city || 'Bedford'}, {sfData?.profile?.state || 'NY'} {sfData?.profile?.postalCode || '10506'}, {sfData?.profile?.country || 'United States'}</p>
+          {activeTab === 'contacts' && (
+            <ContactsTable contacts={contacts} onSelectContact={onViewMember} />
+          )}
+
+          {activeTab === 'relationships' && (
+            <div className="section-panel-inner">
+              <div className="section-panel-header">
+                <h3>All Relationships</h3>
+                <span className="section-count">{relationships.length} items</span>
+              </div>
+              <DataTable
+                emptyMessage="No relationships found for this household."
+                rows={relationships}
+                columns={[
+                  { key: 'person1', label: 'Related Person' },
+                  { key: 'person2', label: 'Person (Contact)' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'type', label: 'Type' },
+                  { key: 'explanation', label: 'Relationship Explanation' },
+                ]}
+              />
             </div>
-          </div>
-          <div className="household-info-item">
-            <User size={18} />
-            <div>
-              <span className="info-label">Primary Member</span>
-              <p>{primaryName}</p>
-              <p className="info-sub">{userEmail(sfData, 'john.doe@example.com')}</p>
-              <p className="info-sub">{sfData?.profile?.phone || '(914) 555-1234'}</p>
-            </div>
-          </div>
-          <div className="household-info-item">
-            <Calendar size={18} />
-            <div>
-              <span className="info-label">Member Since</span>
-              <p>January 15, 2024</p>
-              <p className="info-sub">16 months</p>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </PortalPageLayout>
   );
-}
-
-function userEmail(sfData, fallback) {
-  return sfData?.profile?.email || fallback;
 }

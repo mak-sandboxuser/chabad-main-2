@@ -62,6 +62,7 @@ import {
   isAlreadySignedInError,
   sendSignInMagicLink,
 } from '../utils/clerkMagicLink';
+import { showToast } from '../utils/toast';
 
 export default function Login({ initialError = '' }) {
   const clerk = useClerk();
@@ -158,6 +159,7 @@ export default function Login({ initialError = '' }) {
         }
       }
       setSentTo(email);
+      showToast({ message: 'Sign-in link sent! Check your email.', type: 'success' });
       authTrace('LOGIN_MAGIC_LINK_SENT', { email });
     } catch (err) {
       authTrace('LOGIN_FAIL', { email, error: getClerkErrorMessage(err) || err.message });

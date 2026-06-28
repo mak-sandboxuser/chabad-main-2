@@ -4,26 +4,13 @@ import {
   RotateCcw, CreditCard, Landmark,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
-
-const ROWS = [
-  { date: 'Dec 15, 2024', amount: '$150.00', method: 'Visa ending in 4242', type: 'visa', status: 'Completed' },
-  { date: 'Nov 15, 2024', amount: '$150.00', method: 'Visa ending in 4242', type: 'visa', status: 'Completed' },
-  { date: 'Oct 15, 2024', amount: '$150.00', method: 'Bank Account •••• 5678', type: 'bank', status: 'Completed' },
-  { date: 'Sep 15, 2024', amount: '$150.00', method: 'Visa ending in 4242', type: 'visa', status: 'Pending' },
-  { date: 'Aug 15, 2024', amount: '$150.00', method: 'Visa ending in 4242', type: 'visa', status: 'Completed' },
-];
+import { formatDisplayDate, getPayments, parseMoney } from '../../utils/portalData';
 
 export default function ContributionsPage({ theme, sfData, onDonate }) {
   const [page, setPage] = useState(1);
-  const payments = sfData?.financials?.payments?.length
-    ? sfData.financials.payments.map((p) => ({
-        date: p.date,
-        amount: p.amount,
-        method: p.method || 'Visa ending in 4242',
-        type: 'visa',
-        status: p.status || 'Completed',
-      }))
-    : ROWS;
+  const payments = getPayments(sfData);
+  const totalContributed = payments.reduce((sum, item) => sum + parseMoney(item.amount), 0);
+  const lastPayment = payments[0];
 
   return (
     <PortalPageLayout
@@ -33,9 +20,9 @@ export default function ContributionsPage({ theme, sfData, onDonate }) {
     >
       <div className="contributions-summary-row">
         {[
-          { label: '2024 Contributions', value: '$1,125.00', sub: 'Total contributed in 2024', extra: '↑ 12% vs last year', extraClass: 'text-success', icon: Heart },
-          { label: 'Total Contributions', value: '18', sub: 'All time contributions', icon: Calendar },
-          { label: 'Last Contribution', value: 'Dec 15, 2024', sub: 'Most recent contribution', icon: Clock },
+          { label: 'Total Contributed', value: `$${totalContributed.toFixed(2)}`, sub: `${payments.length} payments on file`, icon: Heart },
+          { label: 'Total Contributions', value: String(payments.length), sub: 'All time contributions', icon: Calendar },
+          { label: 'Last Contribution', value: formatDisplayDate(lastPayment?.date), sub: lastPayment?.amount || '—', icon: Clock },
         ].map((c) => {
           const Icon = c.icon;
           return (
@@ -44,7 +31,6 @@ export default function ContributionsPage({ theme, sfData, onDonate }) {
               <span className="dash-stat-label">{c.label}</span>
               <strong>{c.value}</strong>
               <small>{c.sub}</small>
-              {c.extra && <small className={c.extraClass}>{c.extra}</small>}
             </div>
           );
         })}
@@ -59,14 +45,13 @@ export default function ContributionsPage({ theme, sfData, onDonate }) {
       <div className="contributions-filters glass-panel">
         <div className="filter-field">
           <Calendar size={16} />
-          <select defaultValue="2024"><option>Jan 1, 2024 - Dec 31, 2024</option></select>
+          <select defaultValue="all"><option>All dates</option></select>
         </div>
         <div className="filter-field">
           <Filter size={16} />
           <select defaultValue="all"><option>All Types</option></select>
         </div>
         <button type="button" className="dash-btn-outline"><Upload size={16} /> Export Statement</button>
-        <button type="button" className="dash-btn-gold">Apply Filters</button>
       </div>
 
       <div className="contributions-filter-meta">
@@ -80,44 +65,47 @@ export default function ContributionsPage({ theme, sfData, onDonate }) {
             <tr>
               <th>Date ↓</th>
               <th>Amount</th>
+              <th>Type</th>
               <th>Payment Method</th>
               <th>Status</th>
-              <th>Details</th>
             </tr>
           </thead>
           <tbody>
-            {payments.slice(0, 10).map((row, i) => (
-              <tr key={i}>
-                <td>{row.date}</td>
+            {payments.length ? payments.map((row, i) => (
+              <tr key={row.id || i}>
+                <td>{formatDisplayDate(row.date)}</td>
                 <td><strong>{row.amount}</strong></td>
+                <td>{row.subType || row.type}</td>
                 <td className="payment-method-cell">
-                  {row.type === 'bank' ? <Landmark size={16} /> : <CreditCard size={16} />}
-                  {row.method}
+                  {(row.method || '').toLowerCase().includes('bank') ? <Landmark size={16} /> : <CreditCard size={16} />}
+                  {row.method || '—'}
                 </td>
                 <td>
                   <span className={`badge ${row.status === 'Pending' ? 'badge-pending' : 'badge-active'}`}>
-                    {row.status}
+                    {row.status || 'Paid'}
                   </span>
                 </td>
-                <td><button type="button" className="portal-text-link">View Details →</button></td>
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-secondary)' }}>
+                  No contributions found yet.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
 
-        <div className="table-pagination">
-          <span>Showing 1 to 10 of {payments.length} contributions</span>
-          <div className="pagination-controls">
-            <button type="button" disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft size={16} /></button>
-            <button type="button" className={page === 1 ? 'active' : ''} onClick={() => setPage(1)}>1</button>
-            <button type="button" className={page === 2 ? 'active' : ''} onClick={() => setPage(2)}>2</button>
-            <button type="button" onClick={() => setPage(2)}><ChevronRight size={16} /></button>
+        {payments.length > 10 && (
+          <div className="table-pagination">
+            <span>Showing 1 to 10 of {payments.length} contributions</span>
+            <div className="pagination-controls">
+              <button type="button" disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft size={16} /></button>
+              <button type="button" className={page === 1 ? 'active' : ''} onClick={() => setPage(1)}>1</button>
+              <button type="button" onClick={() => setPage(2)}><ChevronRight size={16} /></button>
+            </div>
           </div>
-          <label className="rows-per-page">
-            Rows per page
-            <select defaultValue="10"><option>10</option><option>25</option></select>
-          </label>
-        </div>
+        )}
       </div>
     </PortalPageLayout>
   );

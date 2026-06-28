@@ -5,6 +5,11 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const { verifyToken, createClerkClient } = require('@clerk/backend');
 const db = require('./db');
+const {
+  parseMakePayload,
+  extractPortalDataFromPayload,
+  mergePaymentsRemoteAndLocal,
+} = require('./portalDataMapper');
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
@@ -69,12 +74,7 @@ async function lookupSalesforceMember(email) {
     const makeText = await makeResponse.text();
     console.log(`Make.com raw response for ${emailLower}:`, makeText);
 
-    let payload = null;
-    try {
-      payload = JSON.parse(makeText);
-    } catch {
-      // Make.com may return non-JSON; fall back to regex below
-    }
+    const payload = parseMakePayload(makeText);
 
     const readField = (field) => {
       if (payload && payload[field] != null && payload[field] !== '') {
@@ -105,16 +105,84 @@ async function lookupSalesforceMember(email) {
     const name = [firstName, lastName].filter(Boolean).join(' ').trim()
       || emailLower.split('@')[0];
 
+    const phone = readField('mobile') || readField('phone');
+    const homePhone = readField('homePhone');
+    const street = readField('street') || readField('mailingStreet') || readField('primaryStreet');
+    const city = readField('city') || readField('mailingCity') || readField('primaryCity');
+    const state = readField('state') || readField('mailingState') || readField('primaryState');
+    const postalCode = readField('postalCode') || readField('mailingPostalCode') || readField('primaryPostalCode');
+    const country = readField('country') || readField('mailingCountry') || readField('primaryCountry');
+    const nickname = readField('nickname');
+    const title = readField('title');
+    const hebrewName = readField('hebrewName');
+    const fathersHebrewName = readField('fathersHebrewName');
+    const mothersHebrewName = readField('mothersHebrewName');
+    const jewish = readField('jewish');
+    const hebrewBirthdate = readField('hebrewBirthdate');
+    const nextHebrewBirthday = readField('nextHebrewBirthday');
+    const weddingDate = readField('weddingDate');
+    const lifecycleStatus = readField('lifecycleStatus') || readField('status');
+    const birthdate = readField('birthdate');
+    const age = readField('age');
+    const gender = readField('gender');
+
+    const lifecycle = {
+      hebrewName,
+      fathersHebrewName,
+      mothersHebrewName,
+      jewish,
+      hebrewBirthdate,
+      nextHebrewBirthday,
+      weddingDate,
+      lifecycleStatus,
+    };
+
+    const additional = { birthdate, age, gender };
+
+    const memberDetails = {
+      contactId,
+      accountId: sanitizeSalesforceId(readField('accountId')),
+      firstName,
+      lastName,
+      name,
+      role: role || 'Member',
+      email: emailLower,
+      phone,
+      mobile: phone,
+      homePhone,
+      street,
+      city,
+      state,
+      postalCode,
+      country,
+      nickname,
+      title,
+      ...lifecycle,
+      ...additional,
+      profile: {
+        phone,
+        mobile: phone,
+        homePhone,
+        street,
+        city,
+        state,
+        postalCode,
+        country,
+        nickname,
+        title,
+        accountName: readField('accountName') || name,
+        lifecycle,
+        ...lifecycle,
+        additional,
+        ...additional,
+      },
+    };
+
+    memberDetails.portalData = extractPortalDataFromPayload(payload, memberDetails);
+
     return {
       found: true,
-      memberDetails: {
-        contactId,
-        firstName,
-        lastName,
-        name,
-        role: role || 'Member',
-        email: emailLower,
-      },
+      memberDetails,
     };
   } catch (err) {
     console.error('Error calling Make.com webhook:', err);
@@ -125,6 +193,300 @@ async function lookupSalesforceMember(email) {
 function authLog(step, details = {}) {
   const stamp = new Date().toISOString();
   console.log(`[AUTH ${stamp}] ${step}`, details);
+}
+
+function pickFirstNonEmpty(...values) {
+  for (const value of values) {
+    const normalized = (value ?? '').toString().trim();
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+function buildLifecycleFromDetails(details = {}, profile = {}) {
+  const lifecycle = profile.lifecycle || {};
+  return {
+    hebrewName: pickFirstNonEmpty(lifecycle.hebrewName, profile.hebrewName, details.hebrewName),
+    fathersHebrewName: pickFirstNonEmpty(lifecycle.fathersHebrewName, profile.fathersHebrewName, details.fathersHebrewName),
+    mothersHebrewName: pickFirstNonEmpty(lifecycle.mothersHebrewName, profile.mothersHebrewName, details.mothersHebrewName),
+    jewish: pickFirstNonEmpty(lifecycle.jewish, profile.jewish, details.jewish),
+    hebrewBirthdate: pickFirstNonEmpty(lifecycle.hebrewBirthdate, profile.hebrewBirthdate, details.hebrewBirthdate),
+    nextHebrewBirthday: pickFirstNonEmpty(lifecycle.nextHebrewBirthday, profile.nextHebrewBirthday, details.nextHebrewBirthday),
+    weddingDate: pickFirstNonEmpty(lifecycle.weddingDate, profile.weddingDate, details.weddingDate),
+    lifecycleStatus: pickFirstNonEmpty(lifecycle.lifecycleStatus, profile.lifecycleStatus, details.lifecycleStatus, details.status),
+  };
+}
+
+function buildAdditionalFromDetails(details = {}, profile = {}) {
+  const additional = profile.additional || {};
+  return {
+    birthdate: pickFirstNonEmpty(additional.birthdate, profile.birthdate, details.birthdate),
+    age: pickFirstNonEmpty(additional.age, profile.age, details.age),
+    gender: pickFirstNonEmpty(additional.gender, profile.gender, details.gender),
+  };
+}
+
+function buildProfileFromDetails(details = {}) {
+  const profile = details.profile || {};
+  const phone = pickFirstNonEmpty(profile.mobile, profile.phone, details.mobile, details.phone);
+  const lifecycle = buildLifecycleFromDetails(details, profile);
+  const additional = buildAdditionalFromDetails(details, profile);
+  return {
+    accountName: pickFirstNonEmpty(profile.accountName, details.name),
+    phone,
+    mobile: pickFirstNonEmpty(profile.mobile, details.mobile, phone),
+    homePhone: pickFirstNonEmpty(profile.homePhone, details.homePhone),
+    street: pickFirstNonEmpty(profile.street, details.street, profile.primaryStreet, details.primaryStreet),
+    city: pickFirstNonEmpty(profile.city, details.city, profile.primaryCity, details.primaryCity),
+    state: pickFirstNonEmpty(profile.state, details.state, profile.primaryState, details.primaryState),
+    postalCode: pickFirstNonEmpty(
+      profile.postalCode,
+      details.postalCode,
+      profile.primaryPostalCode,
+      details.primaryPostalCode,
+    ),
+    country: pickFirstNonEmpty(profile.country, details.country, profile.primaryCountry, details.primaryCountry),
+    nickname: pickFirstNonEmpty(profile.nickname, details.nickname),
+    title: pickFirstNonEmpty(profile.title, details.title),
+    lifecycle,
+    ...lifecycle,
+    additional,
+    ...additional,
+    householdDonationTotal: profile.householdDonationTotal || '$0.00',
+    spiritual: profile.spiritual || {
+      kosher: 'No',
+      hasPushka: 'No',
+      datePushkaLastEmptied: '',
+    },
+  };
+}
+
+function mergeArrayPreferRemote(remote = [], local = []) {
+  if (Array.isArray(remote) && remote.length) return remote;
+  if (Array.isArray(local) && local.length) return local;
+  return [];
+}
+
+function parseMoney(value) {
+  if (value == null || value === '') return 0;
+  const normalized = String(value).replace(/[^0-9.-]/g, '');
+  const amount = parseFloat(normalized);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function formatMoney(amount) {
+  return `$${amount.toFixed(2)}`;
+}
+
+function deriveMembershipSummary(membership, financials, profile) {
+  if (membership && Object.keys(membership).length) {
+    return membership;
+  }
+
+  const pledges = financials?.pledges || [];
+  const recurring = financials?.recurring || [];
+  const annualCommitment = pledges.reduce((sum, item) => sum + parseMoney(item.total || item.amount), 0);
+  const contributed = pledges.reduce((sum, item) => sum + parseMoney(item.paid || item.amount), 0);
+  const activeRecurring = recurring.find((item) => (item.status || '').toLowerCase() === 'active') || recurring[0];
+
+  return {
+    tier: 'Member',
+    status: profile?.lifecycleStatus || 'Active',
+    memberSince: '',
+    renewalDate: activeRecurring?.nextDate || '',
+    annualCommitment: annualCommitment ? formatMoney(annualCommitment) : formatMoney(parseMoney(profile?.householdDonationTotal)),
+    contributedYtd: formatMoney(contributed),
+    outstanding: formatMoney(Math.max(annualCommitment - contributed, 0)),
+    autoRenewal: activeRecurring ? 'Enabled' : 'Disabled',
+    paymentMethod: activeRecurring?.method || '',
+    paymentMethodExpiry: activeRecurring?.cardExpiry || '',
+    notes: '',
+  };
+}
+
+async function lookupSalesforcePortalData(email, contactId, memberDetails = null) {
+  const webhookUrls = [...new Set([
+    process.env.MAKE_PORTAL_DATA_WEBHOOK_URL,
+    process.env.MAKE_WEBHOOK_URL,
+  ].filter(Boolean))];
+
+  if (!webhookUrls.length) {
+    return memberDetails?.portalData || extractPortalDataFromPayload(null, memberDetails || {});
+  }
+
+  for (const webhookUrl of webhookUrls) {
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.toLowerCase(),
+          contactId: contactId || '',
+          fetchPortal: true,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error(`Make.com portal webhook returned ${response.status} for ${email} (${webhookUrl})`);
+        continue;
+      }
+
+      const text = await response.text();
+      console.log(`Make.com portal data for ${email}:`, text.slice(0, 800));
+      const payload = parseMakePayload(text);
+      const portalData = extractPortalDataFromPayload(payload, memberDetails || {});
+
+      if (
+        portalData.fromSalesforce
+        || portalData.contacts.length > 1
+        || portalData.relationships.length
+        || portalData.payments.length
+        || portalData.pledges.length
+        || portalData.recurring.length
+      ) {
+        return portalData;
+      }
+    } catch (err) {
+      console.error(`Error calling Make.com portal webhook for ${email}:`, err);
+    }
+  }
+
+  return memberDetails?.portalData || extractPortalDataFromPayload(null, memberDetails || {});
+}
+
+function buildFinancialsFromSources(localFinancials = {}, portalData = {}) {
+  const payments = mergePaymentsRemoteAndLocal(
+    portalData.payments || [],
+    localFinancials?.payments || [],
+  );
+  const pledges = mergeArrayPreferRemote(portalData.pledges, portalData.fromSalesforce ? [] : localFinancials?.pledges);
+  const recurring = mergeArrayPreferRemote(portalData.recurring, portalData.fromSalesforce ? [] : localFinancials?.recurring);
+  const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount), 0)
+    || localFinancials.totalPayments
+    || 0;
+
+  return {
+    totalPayments,
+    payments,
+    pledges,
+    recurring,
+  };
+}
+
+function mergeMemberProfile(sfDetails, localMember, portalData = null) {
+  const effectivePortal = portalData || sfDetails?.portalData || extractPortalDataFromPayload(null, sfDetails);
+  const localProfile = localMember?.profile || {};
+  const sfProfile = buildProfileFromDetails(sfDetails);
+  const firstName = pickFirstNonEmpty(sfDetails.firstName, localMember?.firstName, localMember?.name?.split(/\s+/)[0]);
+  const lastName = pickFirstNonEmpty(
+    sfDetails.lastName,
+    localMember?.lastName,
+    localMember?.name?.split(/\s+/).slice(1).join(' '),
+  );
+  const name = pickFirstNonEmpty(
+    [firstName, lastName].filter(Boolean).join(' '),
+    sfDetails.name,
+    localMember?.name,
+    sfDetails.email?.split('@')[0],
+  );
+
+  return {
+    contactId: pickFirstNonEmpty(sfDetails.contactId, localMember?.contactId),
+    accountId: pickFirstNonEmpty(effectivePortal?.accountId, sfDetails.accountId, localMember?.accountId),
+    firstName,
+    lastName,
+    name,
+    email: pickFirstNonEmpty(sfDetails.email, localMember?.email),
+    role: pickFirstNonEmpty(sfDetails.role, localMember?.role, 'Member'),
+    account: {
+      id: pickFirstNonEmpty(effectivePortal?.accountId, sfDetails.accountId, localMember?.accountId),
+      name: pickFirstNonEmpty(effectivePortal?.accountName, localProfile.accountName, sfProfile.accountName, name),
+      phone: pickFirstNonEmpty(effectivePortal?.phone, sfProfile.phone, localProfile.phone),
+      email: pickFirstNonEmpty(effectivePortal?.email, sfDetails.email, localMember?.email),
+      street: pickFirstNonEmpty(effectivePortal?.street, sfProfile.street, localProfile.street),
+      city: pickFirstNonEmpty(effectivePortal?.city, sfProfile.city, localProfile.city),
+      state: pickFirstNonEmpty(effectivePortal?.state, sfProfile.state, localProfile.state),
+      postalCode: pickFirstNonEmpty(effectivePortal?.postalCode, sfProfile.postalCode, localProfile.postalCode),
+      country: pickFirstNonEmpty(effectivePortal?.country, sfProfile.country, localProfile.country),
+    },
+    profile: {
+      ...sfProfile,
+      accountName: pickFirstNonEmpty(effectivePortal?.accountName, sfProfile.accountName, localProfile.accountName, name),
+      phone: pickFirstNonEmpty(sfProfile.phone, sfProfile.mobile, localProfile.phone),
+      mobile: pickFirstNonEmpty(sfProfile.mobile, sfProfile.phone, localProfile.phone),
+      homePhone: pickFirstNonEmpty(sfProfile.homePhone, localProfile.homePhone),
+      street: pickFirstNonEmpty(sfProfile.street, localProfile.street),
+      city: pickFirstNonEmpty(sfProfile.city, localProfile.city),
+      state: pickFirstNonEmpty(sfProfile.state, localProfile.state),
+      postalCode: pickFirstNonEmpty(sfProfile.postalCode, localProfile.postalCode),
+      country: pickFirstNonEmpty(sfProfile.country, localProfile.country),
+      nickname: pickFirstNonEmpty(sfProfile.nickname, localProfile.nickname),
+      title: pickFirstNonEmpty(sfProfile.title, localProfile.title),
+      lifecycle: {
+        hebrewName: pickFirstNonEmpty(sfProfile.lifecycle?.hebrewName, localProfile.lifecycle?.hebrewName, sfProfile.hebrewName),
+        fathersHebrewName: pickFirstNonEmpty(sfProfile.lifecycle?.fathersHebrewName, localProfile.lifecycle?.fathersHebrewName, sfProfile.fathersHebrewName),
+        mothersHebrewName: pickFirstNonEmpty(sfProfile.lifecycle?.mothersHebrewName, localProfile.lifecycle?.mothersHebrewName, sfProfile.mothersHebrewName),
+        jewish: pickFirstNonEmpty(sfProfile.lifecycle?.jewish, localProfile.lifecycle?.jewish, sfProfile.jewish),
+        hebrewBirthdate: pickFirstNonEmpty(sfProfile.lifecycle?.hebrewBirthdate, localProfile.lifecycle?.hebrewBirthdate, sfProfile.hebrewBirthdate),
+        nextHebrewBirthday: pickFirstNonEmpty(sfProfile.lifecycle?.nextHebrewBirthday, localProfile.lifecycle?.nextHebrewBirthday, sfProfile.nextHebrewBirthday),
+        weddingDate: pickFirstNonEmpty(sfProfile.lifecycle?.weddingDate, localProfile.lifecycle?.weddingDate, sfProfile.weddingDate),
+        lifecycleStatus: pickFirstNonEmpty(sfProfile.lifecycle?.lifecycleStatus, localProfile.lifecycle?.lifecycleStatus, sfProfile.lifecycleStatus),
+      },
+      additional: {
+        birthdate: pickFirstNonEmpty(sfProfile.additional?.birthdate, localProfile.additional?.birthdate, sfProfile.birthdate),
+        age: pickFirstNonEmpty(sfProfile.additional?.age, localProfile.additional?.age, sfProfile.age),
+        gender: pickFirstNonEmpty(sfProfile.additional?.gender, localProfile.additional?.gender, sfProfile.gender),
+      },
+      householdDonationTotal: localProfile.householdDonationTotal || sfProfile.householdDonationTotal || '$0.00',
+      spiritual: localProfile.spiritual || sfProfile.spiritual,
+    },
+    contacts: effectivePortal.contacts || [],
+    relationships: effectivePortal.fromSalesforce
+      ? (effectivePortal.relationships || [])
+      : mergeArrayPreferRemote(effectivePortal.relationships, localMember?.syncedFromSalesforce ? localMember?.relationships : []),
+    financials: buildFinancialsFromSources(localMember?.financials, effectivePortal),
+    membership: deriveMembershipSummary(
+      effectivePortal.membership || (localMember?.syncedFromSalesforce ? localMember?.membership : null),
+      buildFinancialsFromSources(localMember?.financials, effectivePortal),
+      {
+        lifecycleStatus: pickFirstNonEmpty(
+          sfProfile.lifecycle?.lifecycleStatus,
+          localProfile.lifecycle?.lifecycleStatus,
+        ),
+        householdDonationTotal: localProfile.householdDonationTotal || sfProfile.householdDonationTotal,
+      },
+    ),
+  };
+}
+
+async function buildPortalSfData(email) {
+  const lookup = await lookupSalesforceMember(email);
+  if (!lookup.found) {
+    return { error: 'unauthorized_member', lookup };
+  }
+
+  const memberDetails = lookup.memberDetails;
+  const localMember = await db.getMemberByEmail(email);
+  const portalData = await lookupSalesforcePortalData(email, memberDetails.contactId, memberDetails);
+  const sfData = mergeMemberProfile(memberDetails, localMember, portalData);
+
+  if (portalData?.fromSalesforce || portalData?.contacts?.length) {
+    await db.syncPortalData(email, { ...portalData, fromSalesforce: true }, memberDetails.contactId);
+  }
+
+  userSalesforceData[email] = sfData;
+  return { sfData, memberDetails, portalData };
+}
+
+async function resolveAuthedEmail(token) {
+  const decoded = await verifyToken(token, {
+    secretKey: process.env.CLERK_SECRET_KEY,
+  });
+  const clerkUser = await clerkClient.users.getUser(decoded.sub);
+  return {
+    userId: decoded.sub,
+    email: clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase() || '',
+  };
 }
 
 function deriveClerkNames(memberDetails) {
@@ -346,11 +708,9 @@ app.get('/api/portal/dashboard', async (req, res) => {
     if (!email) {
       return res.status(400).json({ error: 'No email address found for this user.' });
     }
-    
-    // Only Salesforce members may access the portal
-    const lookup = await lookupSalesforceMember(email);
 
-    if (!lookup.found) {
+    const result = await buildPortalSfData(email);
+    if (result.error) {
       authLog('DASHBOARD_DENIED', { email, reason: 'not_in_salesforce' });
       return res.status(403).json({
         error: 'unauthorized_member',
@@ -358,24 +718,30 @@ app.get('/api/portal/dashboard', async (req, res) => {
       });
     }
 
-    const memberDetails = lookup.memberDetails;
-
-    // Cache Salesforce data
-    userSalesforceData[email] = memberDetails;
+    const { sfData } = result;
 
     // Fetch portal metrics and items
     const dashboardData = await db.getDashboardData();
-    authLog('DASHBOARD_OK', { email, clerkUserId: userId, name: memberDetails?.name });
+    authLog('DASHBOARD_OK', {
+      email,
+      clerkUserId: userId,
+      name: sfData?.name,
+      contactId: sfData?.contactId,
+      contacts: sfData?.contacts?.length || 0,
+      payments: sfData?.financials?.payments?.length || 0,
+      city: sfData?.profile?.city || null,
+      mobile: sfData?.profile?.mobile || null,
+    });
     res.json({
       success: true,
       user: {
         id: userId,
         email: email,
-        role: memberDetails?.role || 'Member',
-        name: memberDetails?.name || 'Grace Church Member'
+        role: sfData?.role || 'Member',
+        name: sfData?.name || 'Chabad Bedford Member',
       },
-      sfData: memberDetails,
-      ...dashboardData
+      sfData,
+      ...dashboardData,
     });
   } catch (error) {
     authLog('DASHBOARD_AUTH_FAIL', { error: error.message });
@@ -383,15 +749,54 @@ app.get('/api/portal/dashboard', async (req, res) => {
   }
 });
 
+app.post('/api/portal/refresh', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const { email } = await resolveAuthedEmail(token);
+    if (!email) {
+      return res.status(400).json({ error: 'No email address found for this user.' });
+    }
+
+    const result = await buildPortalSfData(email);
+    if (result.error) {
+      return res.status(403).json({ error: result.error });
+    }
+
+    res.json({ success: true, sfData: result.sfData, syncedFromSalesforce: Boolean(result.portalData?.fromSalesforce) });
+  } catch (error) {
+    res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+});
+
+// Stripe Checkout Session generation
 // Stripe Checkout Session generation
 app.post('/api/payments/create-checkout-session', async (req, res) => {
-  const { email, amount } = req.body;
+  const authHeader = req.headers.authorization;
+  const { email, amount, contactId, purpose } = req.body;
   if (!email || !amount) {
     return res.status(400).json({ error: 'Email and amount are required.' });
   }
 
   if (!stripe) {
     return res.status(500).json({ error: 'Stripe integration is not configured. Please add STRIPE_SECRET_KEY to backend .env file.' });
+  }
+
+  let resolvedContactId = contactId || '';
+  if (authHeader?.startsWith('Bearer ') && !resolvedContactId) {
+    try {
+      const token = authHeader.split(' ')[1];
+      const decoded = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+      const clerkUser = await clerkClient.users.getUser(decoded.sub);
+      const clerkEmail = clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase();
+      resolvedContactId = userSalesforceData[clerkEmail]?.contactId || '';
+    } catch {
+      // Non-blocking — checkout can proceed without contactId metadata.
+    }
   }
 
   try {
@@ -402,16 +807,21 @@ app.post('/api/payments/create-checkout-session', async (req, res) => {
         price_data: {
           currency: 'usd',
           product_data: {
-            name: 'Grace Church Donation',
-            description: 'Thank you for supporting our community!',
+            name: purpose || 'Chabad Bedford Payment',
+            description: 'Secure payment for membership, pledges, or contributions.',
           },
-          unit_amount: Math.round(amount * 100), // convert to cents
+          unit_amount: Math.round(amount * 100),
         },
         quantity: 1,
       }],
       mode: 'payment',
-      success_url: `${FRONTEND_URL}/dashboard?payment=success`,
-      cancel_url: `${FRONTEND_URL}/dashboard?payment=cancel`,
+      metadata: {
+        email: email.toLowerCase(),
+        contactId: resolvedContactId,
+        purpose: purpose || 'portal_payment',
+      },
+      success_url: `${FRONTEND_URL}/?payment=success`,
+      cancel_url: `${FRONTEND_URL}/?payment=cancel`,
     });
 
     res.json({ url: session.url });
@@ -467,7 +877,12 @@ app.post('/api/portal/update-profile', async (req, res) => {
       return res.status(400).json({ error: 'No email address found for this user.' });
     }
 
-    const { firstName, lastName, phone, street, city, state, postalCode, country } = req.body;
+    const {
+      firstName, lastName, phone, homePhone, street, city, state, postalCode, country, nickname, title,
+      hebrewName, fathersHebrewName, mothersHebrewName, jewish, hebrewBirthdate,
+      nextHebrewBirthday, weddingDate, lifecycleStatus,
+      birthdate, age, gender,
+    } = req.body;
 
     console.log(`Updating profile for: ${email}`);
 
@@ -517,12 +932,26 @@ app.post('/api/portal/update-profile', async (req, res) => {
             firstName,
             lastName,
             phone,
-            mobile: phone, // Map phone to mobile for Make.com webhook
+            mobile: phone,
+            homePhone: homePhone || phone,
             street,
             city,
             state,
             postalCode,
-            country
+            country,
+            nickname,
+            title,
+            hebrewName,
+            fathersHebrewName,
+            mothersHebrewName,
+            jewish,
+            hebrewBirthdate,
+            nextHebrewBirthday,
+            weddingDate,
+            lifecycleStatus,
+            birthdate,
+            age,
+            gender,
           }),
         });
 
@@ -544,20 +973,77 @@ app.post('/api/portal/update-profile', async (req, res) => {
       firstName,
       lastName,
       phone,
+      homePhone,
       street,
       city,
       state,
       postalCode,
-      country
+      country,
+      nickname,
+      title,
+      hebrewName,
+      fathersHebrewName,
+      mothersHebrewName,
+      jewish,
+      hebrewBirthdate,
+      nextHebrewBirthday,
+      weddingDate,
+      lifecycleStatus,
+      birthdate,
+      age,
+      gender,
     }, contactId);
 
+    const lifecycle = {
+      hebrewName,
+      fathersHebrewName,
+      mothersHebrewName,
+      jewish,
+      hebrewBirthdate,
+      nextHebrewBirthday,
+      weddingDate,
+      lifecycleStatus,
+    };
+
+    const additional = { birthdate, age, gender };
+
+    const sfData = mergeMemberProfile(
+      {
+        contactId,
+        firstName,
+        lastName,
+        name: `${firstName || ''} ${lastName || ''}`.trim(),
+        email,
+        role: updatedMember.role || 'Member',
+        ...lifecycle,
+        ...additional,
+        profile: {
+          phone,
+          mobile: phone,
+          homePhone,
+          street,
+          city,
+          state,
+          postalCode,
+          country,
+          nickname,
+          title,
+          lifecycle,
+          ...lifecycle,
+          additional,
+          ...additional,
+        },
+      },
+      updatedMember,
+    );
+
     // Update cached user data
-    userSalesforceData[email] = updatedMember;
+    userSalesforceData[email] = sfData;
 
     res.json({
       success: true,
       message: 'Profile updated successfully.',
-      sfData: updatedMember
+      sfData,
     });
   } catch (error) {
     console.error('Profile update authorization or save error:', error);

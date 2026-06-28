@@ -1,21 +1,25 @@
 import React from 'react';
 import {
   Wallet, Calendar, Lock, Heart, RefreshCw, CreditCard,
-  User, Mail, Phone, MapPin, ChevronRight, ShieldCheck, Plus,
+  User, Mail, Phone, MapPin, ChevronRight, ShieldCheck,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
-
-const PAYMENTS = [
-  { date: 'May 15, 2025', desc: 'Monthly Membership Contribution', amount: '$150.00', method: 'Visa •••• 4242', status: 'Completed' },
-  { date: 'Apr 15, 2025', desc: 'Monthly Membership Contribution', amount: '$150.00', method: 'Visa •••• 4242', status: 'Completed' },
-  { date: 'Mar 15, 2025', desc: 'Monthly Membership Contribution', amount: '$150.00', method: 'Visa •••• 4242', status: 'Completed' },
-];
+import {
+  formatAddress,
+  formatDisplayDate,
+  getAccount,
+  getFinancialSummary,
+  getMembership,
+  getPayments,
+  getRecurring,
+} from '../../utils/portalData';
 
 export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDonate }) {
-  const contributed = 1125;
-  const total = 1800;
-  const remaining = total - contributed;
-  const pct = Math.round((contributed / total) * 100);
+  const summary = getFinancialSummary(sfData);
+  const membership = getMembership(sfData);
+  const account = getAccount(sfData);
+  const payments = getPayments(sfData);
+  const recurring = getRecurring(sfData)[0];
 
   return (
     <PortalPageLayout
@@ -28,17 +32,17 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
           <Wallet size={24} className="text-accent" />
           <div>
             <span className="dash-stat-label">Outstanding Balance</span>
-            <strong className="financial-big">${remaining.toFixed(2)}</strong>
-            <small className="text-warn">{100 - pct}% of annual commitment remaining</small>
+            <strong className="financial-big">${summary.outstanding.toFixed(2)}</strong>
+            <small className="text-warn">{100 - summary.progressPct}% of annual commitment remaining</small>
           </div>
         </div>
         <div className="financial-top-col">
           <Calendar size={20} className="text-accent" />
           <div>
             <span className="dash-stat-label">Next Payment</span>
-            <strong>June 15, 2024</strong>
-            <strong className="financial-amount">$150.00</strong>
-            <button type="button" className="portal-text-link">View payment schedule →</button>
+            <strong>{formatDisplayDate(recurring?.nextDate || membership.renewalDate)}</strong>
+            <strong className="financial-amount">{recurring?.amount || '—'}</strong>
+            <button type="button" className="portal-text-link" onClick={() => onNavigate('financial')}>View payment schedule →</button>
           </div>
         </div>
         <div className="financial-top-col actions">
@@ -53,13 +57,13 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
         <div className="financial-donut-card glass-panel">
           <h3>Annual Commitment Progress</h3>
           <div className="financial-donut-wrap">
-            <div className="financial-donut" style={{ '--pct': pct }}>
-              <span>{pct}%<small>of commitment met</small></span>
+            <div className="financial-donut" style={{ '--pct': summary.progressPct }}>
+              <span>{summary.progressPct}%<small>of commitment met</small></span>
             </div>
             <ul className="financial-legend">
-              <li><span className="dot blue" /> Contributed — ${contributed.toFixed(2)} ({pct}%)</li>
-              <li><span className="dot gold" /> Remaining — ${remaining.toFixed(2)} ({100 - pct}%)</li>
-              <li><span className="dot gray" /> Total Commitment — ${total.toFixed(2)}</li>
+              <li><span className="dot blue" /> Contributed — {membership.contributedYtd} ({summary.progressPct}%)</li>
+              <li><span className="dot gold" /> Remaining — ${summary.outstanding.toFixed(2)} ({100 - summary.progressPct}%)</li>
+              <li><span className="dot gray" /> Total Commitment — {membership.annualCommitment}</li>
             </ul>
           </div>
         </div>
@@ -83,13 +87,13 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
               <tr><th>Date</th><th>Description</th><th>Amount</th><th>Payment Method</th><th>Status</th></tr>
             </thead>
             <tbody>
-              {(sfData?.financials?.payments?.slice(0, 3) || PAYMENTS).map((p, i) => (
-                <tr key={i}>
-                  <td>{p.date}</td>
-                  <td>{p.desc || p.type}</td>
+              {payments.slice(0, 5).map((p, i) => (
+                <tr key={p.id || i}>
+                  <td>{formatDisplayDate(p.date)}</td>
+                  <td>{p.subType || p.type}</td>
                   <td>{p.amount}</td>
-                  <td>{p.method || 'Visa •••• 4242'}</td>
-                  <td><span className="badge badge-active">{p.status || 'Completed'}</span></td>
+                  <td>{p.method || '—'}</td>
+                  <td><span className="badge badge-active">{p.status || 'Paid'}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -100,11 +104,11 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
           <div className="dash-panel glass-panel">
             <h3>My Account</h3>
             {[
-              ['Membership', 'Chai Society'],
-              ['Membership Status', 'Active', 'badge'],
-              ['Member Since', 'Jan 1, 2024'],
-              ['Renewal Date', 'Jan 1, 2025'],
-              ['Household', 'Doe Family (4)', 'link'],
+              ['Membership', membership.tier],
+              ['Membership Status', membership.status, 'badge'],
+              ['Member Since', formatDisplayDate(membership.memberSince)],
+              ['Renewal Date', formatDisplayDate(membership.renewalDate)],
+              [`Household (${sfData?.contacts?.length || 1})`, account.name, 'link'],
             ].map(([label, val, type]) => (
               <div key={label} className="financial-info-row">
                 <span>{label}</span>
@@ -120,23 +124,21 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
             <div className="payment-method-row">
               <CreditCard size={18} />
               <div>
-                <strong>Visa ending in 4242</strong>
+                <strong>{membership.paymentMethod}</strong>
                 <span className="badge badge-active">Primary</span>
               </div>
             </div>
-            <button type="button" className="portal-text-link"><Plus size={14} /> Add Payment Method</button>
           </div>
 
           <div className="dash-panel glass-panel">
             <div className="dash-panel-header">
               <h3>Billing Contact</h3>
-              <button type="button" className="portal-text-link">Edit</button>
             </div>
             <div className="billing-contact">
-              <p><User size={14} /> {sfData?.name || 'John Doe'}</p>
-              <p><Mail size={14} /> {sfData?.profile?.email || 'john.doe@example.com'}</p>
-              <p><Phone size={14} /> {sfData?.profile?.phone || '(914) 555-1234'}</p>
-              <p><MapPin size={14} /> 123 Bedford Road, Bedford, NY 10506</p>
+              <p><User size={14} /> {sfData?.name}</p>
+              <p><Mail size={14} /> {sfData?.email}</p>
+              <p><Phone size={14} /> {account.phone || '—'}</p>
+              <p><MapPin size={14} /> {formatAddress(account)}</p>
             </div>
           </div>
         </div>
@@ -145,14 +147,14 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
           <div className="recurring-header">
             <RefreshCw size={20} className="text-purple" />
             <div>
-              <h3>Monthly Membership Contribution</h3>
-              <strong className="recurring-amount">$150.00 / month</strong>
+              <h3>{recurring?.type || 'Recurring Contribution'}</h3>
+              <strong className="recurring-amount">{recurring ? `${recurring.amount} / ${(recurring.frequency || 'month').toLowerCase()}` : 'Not configured'}</strong>
             </div>
           </div>
-          <div className="financial-info-row"><span>Next Charge</span><strong>June 15, 2024</strong></div>
-          <div className="financial-info-row"><span>Status</span><span className="badge badge-active">Active</span></div>
+          <div className="financial-info-row"><span>Next Charge</span><strong>{formatDisplayDate(recurring?.nextDate)}</strong></div>
+          <div className="financial-info-row"><span>Status</span><span className="badge badge-active">{recurring?.status || 'Inactive'}</span></div>
           <button type="button" className="dash-btn-outline full-width" onClick={() => onNavigate('recurring')}>
-            Manage Contribution <ChevronRight size={14} />
+            Manage Billing <ChevronRight size={14} />
           </button>
         </div>
       </div>

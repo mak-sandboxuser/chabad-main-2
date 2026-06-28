@@ -1,0 +1,148 @@
+export function getInitials(name = '') {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || '?';
+}
+
+export function parseMoney(value) {
+  if (value == null || value === '') return 0;
+  const normalized = String(value).replace(/[^0-9.-]/g, '');
+  const amount = parseFloat(normalized);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+export function formatMoney(amount) {
+  return `$${Number(amount || 0).toFixed(2)}`;
+}
+
+export function formatDisplayDate(value) {
+  const normalized = (value ?? '').toString().trim();
+  if (!normalized) return '—';
+  if (/^\d{4}-\d{2}-\d{2}/.test(normalized)) {
+    const [year, month, day] = normalized.slice(0, 10).split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+  return normalized;
+}
+
+export function getAccount(sfData) {
+  const profile = sfData?.profile || {};
+  return {
+    id: sfData?.accountId || sfData?.account?.id || '',
+    name: sfData?.account?.name || profile.accountName || sfData?.name || 'Household',
+    phone: sfData?.account?.phone || profile.phone || profile.mobile || '',
+    email: sfData?.account?.email || sfData?.email || '',
+    street: sfData?.account?.street || profile.street || '',
+    city: sfData?.account?.city || profile.city || '',
+    state: sfData?.account?.state || profile.state || '',
+    postalCode: sfData?.account?.postalCode || profile.postalCode || '',
+    country: sfData?.account?.country || profile.country || '',
+  };
+}
+
+export function getContacts(sfData) {
+  if (sfData?.contacts?.length) {
+    return sfData.contacts.map((contact) => ({
+      ...contact,
+      isPrimary: Boolean(contact.isPrimary),
+      isSecondary: Boolean(contact.isSecondary),
+      role: normalizeContactRole(contact.role),
+    }));
+  }
+  if (sfData?.name) {
+    return [{
+      id: sfData.contactId || 'primary',
+      name: sfData.name,
+      role: normalizeContactRole(sfData.role || 'Member'),
+      isPrimary: true,
+      isSecondary: false,
+      contactId: sfData.contactId,
+      email: sfData.email,
+      phone: sfData.profile?.phone || sfData.profile?.mobile,
+    }];
+  }
+  return [];
+}
+
+function normalizeContactRole(role = '') {
+  const value = role.trim();
+  if (!value) return 'Member';
+  if (/primary member/i.test(value)) return 'Parent';
+  if (/secondary member/i.test(value)) return 'Parent';
+  if (/spouse/i.test(value)) return 'Parent';
+  if (/child/i.test(value)) return 'Child';
+  return value;
+}
+
+export function getRelationships(sfData) {
+  return sfData?.relationships || [];
+}
+
+export function getPayments(sfData) {
+  return sfData?.financials?.payments || [];
+}
+
+export function getPledges(sfData) {
+  return sfData?.financials?.pledges || [];
+}
+
+export function getRecurring(sfData) {
+  return sfData?.financials?.recurring || [];
+}
+
+export function getMembership(sfData) {
+  const membership = sfData?.membership || {};
+  const pledges = getPledges(sfData);
+  const recurring = getRecurring(sfData);
+  const activeRecurring = recurring.find((item) => (item.status || '').toLowerCase() === 'active') || recurring[0];
+  const annualCommitment = parseMoney(membership.annualCommitment)
+    || pledges.reduce((sum, item) => sum + parseMoney(item.total || item.amount), 0);
+  const contributed = parseMoney(membership.contributedYtd)
+    || pledges.reduce((sum, item) => sum + parseMoney(item.paid || item.amount), 0);
+
+  return {
+    tier: membership.tier || 'Member',
+    status: membership.status || 'Active',
+    memberSince: membership.memberSince || sfData?.joinedDate || '',
+    renewalDate: membership.renewalDate || activeRecurring?.nextDate || '',
+    annualCommitment: membership.annualCommitment || (annualCommitment ? formatMoney(annualCommitment) : '$0.00'),
+    contributedYtd: membership.contributedYtd || formatMoney(contributed),
+    outstanding: membership.outstanding || formatMoney(Math.max(annualCommitment - contributed, 0)),
+    autoRenewal: membership.autoRenewal || (activeRecurring ? 'Enabled' : 'Disabled'),
+    paymentMethod: membership.paymentMethod || activeRecurring?.method || '—',
+    paymentMethodExpiry: membership.paymentMethodExpiry || activeRecurring?.cardExpiry || '',
+    notes: membership.notes || '',
+  };
+}
+
+export function getFinancialSummary(sfData) {
+  const membership = getMembership(sfData);
+  const annual = parseMoney(membership.annualCommitment);
+  const contributed = parseMoney(membership.contributedYtd);
+  const outstanding = parseMoney(membership.outstanding);
+  const pct = annual > 0 ? Math.round((contributed / annual) * 100) : 0;
+
+  return {
+    ...membership,
+    annual,
+    contributed,
+    outstanding,
+    progressPct: Math.min(pct, 100),
+  };
+}
+
+export function formatAddress(account) {
+  const parts = [
+    account.street,
+    [account.city, account.state, account.postalCode].filter(Boolean).join(', '),
+    account.country,
+  ].filter(Boolean);
+  return parts.join(', ') || '—';
+}
