@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { User, Pencil, X, Save, MapPin, Heart, Calendar } from 'lucide-react';
-import { apiUrl } from '../../config/api';
 import { showToast } from '../../utils/toast';
+import { fetchPortalApi } from '../../utils/portalApi';
 import {
   ADDITIONAL_FIELD_KEYS,
   ADDITIONAL_FIELD_LABELS,
@@ -44,7 +44,7 @@ function FieldRow({ label, value, fieldKey, editing, fullWidth, children }) {
 
 export default function ProfilePage({
   user,
-  token,
+  getAuthToken,
   sfData,
   onProfileUpdated,
 }) {
@@ -100,19 +100,11 @@ export default function ProfilePage({
     setSaving(true);
 
     try {
-      const response = await fetch(apiUrl('/api/portal/update-profile'), {
+      const data = await fetchPortalApi('/api/portal/update-profile', {
+        getAuthToken,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(profileFormToPayload(draft)),
+        body: profileFormToPayload(draft),
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update profile.');
-      }
 
       const updated = sfDataToProfileForm(data.sfData, user?.email);
       setForm(updated);

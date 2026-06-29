@@ -48,6 +48,13 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+/** Make.com Array Aggregator wraps lists as { array: [...], __IMTAGGLENGTH__: n } */
+function unwrapMakeArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object' && Array.isArray(value.array)) return value.array;
+  return [];
+}
+
 function toBool(value) {
   if (typeof value === 'boolean') return value;
   const normalized = String(value ?? '').trim().toLowerCase();
@@ -68,13 +75,42 @@ function normalizeContact(raw = {}, index = 0) {
 }
 
 function normalizeRelationship(raw = {}, index = 0) {
+  let person1 = raw.person1
+    || raw.relatedPerson
+    || raw.fromName
+    || raw['Person (Contact)']
+    || raw.OneCRM__Related_Contact__c
+    || '';
+  const explanation = raw.explanation
+    || raw.relationshipExplanation
+    || raw['Relationship Explanation']
+    || raw.OneCRM__Relationship_Explanation__c
+    || '';
+  let person2 = raw.person2
+    || raw.person
+    || raw.toName
+    || raw['Full Name']
+    || raw.Name
+    || raw.OneCRM__Contact__c
+    || '';
+
+  // Make.com sometimes maps the related contact lookup ID instead of the display name.
+  if (/^003[\w]{12,18}$/i.test(String(person1).trim()) && explanation) {
+    const nameMatch = explanation.match(/^(.+?)\s+is\s+/i);
+    if (nameMatch) person1 = nameMatch[1].trim();
+  }
+  if (/^003[\w]{12,18}$/i.test(String(person2).trim()) && explanation) {
+    const nameMatch = explanation.match(/is\s+(.+?)'s\s/i);
+    if (nameMatch) person2 = nameMatch[1].trim();
+  }
+
   return {
     id: raw.id || `relationship_${index}`,
-    person1: raw.person1 || raw.relatedPerson || raw.fromName || '',
-    person2: raw.person2 || raw.person || raw.toName || '',
-    status: raw.status || 'Current',
-    type: raw.type || raw.relationshipType || '',
-    explanation: raw.explanation || raw.relationshipExplanation || '',
+    person1,
+    person2,
+    status: raw.status || raw.Status || raw.OneCRM__Status__c || 'Current',
+    type: raw.type || raw.Type || raw.relationshipType || raw.OneCRM__Type__c || '',
+    explanation,
   };
 }
 
@@ -170,15 +206,15 @@ function extractPortalDataFromPayload(payload, memberDetails = {}) {
     };
   }
 
-  const contacts = asArray(payload.contacts || payload.householdContacts || payload.accountContacts)
+  const contacts = unwrapMakeArray(payload.contacts || payload.householdContacts || payload.accountContacts)
     .map(normalizeContact);
-  const relationships = asArray(payload.relationships || payload.householdRelationships)
+  const relationships = unwrapMakeArray(payload.relationships || payload.householdRelationships)
     .map(normalizeRelationship);
-  const payments = asArray(payload.payments || payload.incomePayments)
+  const payments = unwrapMakeArray(payload.payments || payload.incomePayments)
     .map(normalizePayment);
-  const pledges = asArray(payload.pledges || payload.incomePledges)
+  const pledges = unwrapMakeArray(payload.pledges || payload.incomePledges)
     .map(normalizePledge);
-  const recurring = asArray(payload.recurring || payload.recurringBilling || payload.recurringPayments)
+  const recurring = unwrapMakeArray(payload.recurring || payload.recurringBilling || payload.recurringPayments)
     .map(normalizeRecurring);
   const membership = normalizeMembership(payload.membership);
 
@@ -228,6 +264,7 @@ module.exports = {
   extractPortalDataFromPayload,
   buildContactsFromMemberDetails,
   mergePaymentsRemoteAndLocal,
+  unwrapMakeArray,
   normalizeContact,
   normalizePayment,
 };

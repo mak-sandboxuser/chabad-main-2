@@ -14,10 +14,10 @@ import FinancialsPage from './pages/FinancialsPage';
 import ContributionsPage from './pages/ContributionsPage';
 import ProfilePage from './pages/ProfilePage';
 import QuickPaymentModal from './shared/QuickPaymentModal';
-import { apiUrl } from '../config/api';
 import { showToast } from '../utils/toast';
+import { fetchPortalApi } from '../utils/portalApi';
 
-export default function Portal({ user, token, onLogout }) {
+export default function Portal({ user, getAuthToken, onLogout }) {
   const [stats, setStats] = useState(null);
   const [members, setMembers] = useState([]);
   const [events, setEvents] = useState([]);
@@ -57,17 +57,8 @@ export default function Portal({ user, token, onLogout }) {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await fetch(apiUrl('/api/portal/dashboard'), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch dashboard data.');
-      }
-
+      const data = await fetchPortalApi('/api/portal/dashboard', { getAuthToken });
+      setError('');
       setStats(data.stats);
       setMembers(data.members);
       setEvents(data.events);
@@ -75,21 +66,25 @@ export default function Portal({ user, token, onLogout }) {
       return data;
     } catch (err) {
       setError(err.message);
-      if (err.message.includes('expired') || err.message.includes('Authorization')) {
-        setTimeout(onLogout, 3000);
-      }
       return null;
     }
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     const load = async () => {
       setLoading(true);
       await fetchDashboardData();
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     };
+
     load();
-  }, [token, onLogout]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getAuthToken]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -103,7 +98,7 @@ export default function Portal({ user, token, onLogout }) {
       setPaymentAlert({ type: 'cancel', message: 'Payment cancelled. No charges were made.' });
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [token]);
+  }, [getAuthToken]);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
@@ -384,7 +379,7 @@ export default function Portal({ user, token, onLogout }) {
           {activeTab === 'profile' && (
             <ProfilePage
               user={user}
-              token={token}
+              getAuthToken={getAuthToken}
               sfData={sfData}
               onProfileUpdated={setSfData}
             />
@@ -397,7 +392,7 @@ export default function Portal({ user, token, onLogout }) {
         open={showDonateModal}
         onClose={() => setShowDonateModal(false)}
         user={user}
-        token={token}
+        getAuthToken={getAuthToken}
         sfData={sfData}
       />
     </div>

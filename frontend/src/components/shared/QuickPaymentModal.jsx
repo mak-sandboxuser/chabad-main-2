@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { DollarSign, Lock, X } from 'lucide-react';
-import { apiUrl } from '../../config/api';
+import { fetchPortalApi } from '../../utils/portalApi';
 
 export default function QuickPaymentModal({
   open,
   onClose,
   user,
-  token,
+  getAuthToken,
   sfData,
   defaultAmount = '50',
   purpose = 'Chabad Bedford Payment',
@@ -23,24 +23,16 @@ export default function QuickPaymentModal({
 
     setLoading(true);
     try {
-      const response = await fetch(apiUrl('/api/payments/create-checkout-session'), {
+      const data = await fetchPortalApi('/api/payments/create-checkout-session', {
+        getAuthToken,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+        body: {
           email: user?.email,
           amount: parsed,
           contactId: sfData?.contactId || '',
           purpose,
-        }),
+        },
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to start checkout.');
-      }
       if (data.url) window.location.href = data.url;
     } catch (err) {
       alert(err.message);

@@ -107,7 +107,7 @@
         "accountName": "Rohit Jain",
         "phone": "+91 9569552954",
         "homePhone": "+91 5678876578",
-        "street": "736 civil line",
+        "street": "736 Civil Line",
         "city": "Lalitpur",
         "state": "UP",
         "postalCode": "284403",
@@ -115,11 +115,11 @@
         "nickname": "Rohit",
         "title": "",
         "lifecycle": {
-          "hebrewName": "rohit ji",
-          "fathersHebrewName": "rajesh ji",
-          "mothersHebrewName": "seema ji",
+          "hebrewName": "rohit ji update",
+          "fathersHebrewName": "rajesh jiupdate",
+          "mothersHebrewName": "seema ji update",
           "jewish": "Jewish",
-          "hebrewBirthdate": "15 Tammuz, 5770",
+          "hebrewBirthdate": "15 Tammuz, 5770 update",
           "nextHebrewBirthday": "2026-06-30",
           "weddingDate": "2026-06-23",
           "lifecycleStatus": "Living"
@@ -129,7 +129,31 @@
           "age": "16",
           "gender": "Male"
         }
-      }
+      },
+      "accountId": "001Jx00001nghLaIAI",
+      "syncedFromSalesforce": true,
+      "contacts": [
+        {
+          "id": "003Jx00001ZtMGAIA3",
+          "name": "Rohit Jain",
+          "role": "Member",
+          "isPrimary": true,
+          "isSecondary": false,
+          "contactId": "003Jx00001ZtMGAIA3",
+          "email": "rohitjainltp59@gmail.com",
+          "phone": "+91 9569552954"
+        }
+      ],
+      "relationships": [
+        {
+          "id": "relationship_0",
+          "person1": "Mohd Khan",
+          "person2": "Rohit Jain",
+          "status": "Current",
+          "type": "Sibling",
+          "explanation": "Mohd Khan is Rohit Jain's Sibling"
+        }
+      ]
     },
     {
       "id": "m7",

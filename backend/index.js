@@ -18,7 +18,15 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkeyformagiclinks';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const SESSION_CLOCK_SKEW_MS = Number.parseInt(process.env.SESSION_CLOCK_SKEW_MS || '300000', 10);
 const DEV_LOCALHOST_ORIGIN = /^https?:\/\/localhost(?::\d+)?$/;
+
+async function verifyClerkSessionToken(token) {
+  return verifyToken(token, {
+    secretKey: process.env.CLERK_SECRET_KEY,
+    clockSkewInMs: SESSION_CLOCK_SKEW_MS,
+  });
+}
 
 app.use(cors({
   origin(origin, callback) {
@@ -304,6 +312,28 @@ function deriveMembershipSummary(membership, financials, profile) {
   };
 }
 
+async function fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDetails = null) {
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: email.toLowerCase(),
+      contactId: contactId || '',
+      fetchPortal: true,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error(`Make.com portal webhook returned ${response.status} for ${email} (${webhookUrl})`);
+    return null;
+  }
+
+  const text = await response.text();
+  console.log(`Make.com portal data for ${email}:`, text.slice(0, 800));
+  const payload = parseMakePayload(text);
+  return extractPortalDataFromPayload(payload, memberDetails || {});
+}
+
 async function lookupSalesforcePortalData(email, contactId, memberDetails = null) {
   const webhookUrls = [...new Set([
     process.env.MAKE_PORTAL_DATA_WEBHOOK_URL,
@@ -311,30 +341,22 @@ async function lookupSalesforcePortalData(email, contactId, memberDetails = null
   ].filter(Boolean))];
 
   if (!webhookUrls.length) {
-    return memberDetails?.portalData || extractPortalDataFromPayload(null, memberDetails || {});
+    return extractPortalDataFromPayload(null, memberDetails || {});
   }
 
   for (const webhookUrl of webhookUrls) {
     try {
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.toLowerCase(),
-          contactId: contactId || '',
-          fetchPortal: true,
-        }),
-      });
+      let portalData = await fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDetails);
+      if (!portalData) continue;
 
-      if (!response.ok) {
-        console.error(`Make.com portal webhook returned ${response.status} for ${email} (${webhookUrl})`);
-        continue;
+      if (portalData.fromSalesforce && !portalData.relationships?.length) {
+        console.warn(`Make.com portal webhook returned no relationships for ${email} — retrying in 3s`);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const retryData = await fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDetails);
+        if (retryData?.relationships?.length) {
+          portalData = retryData;
+        }
       }
-
-      const text = await response.text();
-      console.log(`Make.com portal data for ${email}:`, text.slice(0, 800));
-      const payload = parseMakePayload(text);
-      const portalData = extractPortalDataFromPayload(payload, memberDetails || {});
 
       if (
         portalData.fromSalesforce
@@ -351,16 +373,25 @@ async function lookupSalesforcePortalData(email, contactId, memberDetails = null
     }
   }
 
-  return memberDetails?.portalData || extractPortalDataFromPayload(null, memberDetails || {});
+  return extractPortalDataFromPayload(null, memberDetails || {});
 }
 
 function buildFinancialsFromSources(localFinancials = {}, portalData = {}) {
+  if (portalData.fromSalesforce) {
+    const payments = portalData.payments || [];
+    const pledges = portalData.pledges || [];
+    const recurring = portalData.recurring || [];
+    const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount), 0);
+
+    return { totalPayments, payments, pledges, recurring };
+  }
+
   const payments = mergePaymentsRemoteAndLocal(
     portalData.payments || [],
     localFinancials?.payments || [],
   );
-  const pledges = mergeArrayPreferRemote(portalData.pledges, portalData.fromSalesforce ? [] : localFinancials?.pledges);
-  const recurring = mergeArrayPreferRemote(portalData.recurring, portalData.fromSalesforce ? [] : localFinancials?.recurring);
+  const pledges = mergeArrayPreferRemote(portalData.pledges, localFinancials?.pledges);
+  const recurring = mergeArrayPreferRemote(portalData.recurring, localFinancials?.recurring);
   const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount), 0)
     || localFinancials.totalPayments
     || 0;
@@ -374,7 +405,7 @@ function buildFinancialsFromSources(localFinancials = {}, portalData = {}) {
 }
 
 function mergeMemberProfile(sfDetails, localMember, portalData = null) {
-  const effectivePortal = portalData || sfDetails?.portalData || extractPortalDataFromPayload(null, sfDetails);
+  const effectivePortal = portalData ?? extractPortalDataFromPayload(null, sfDetails);
   const localProfile = localMember?.profile || {};
   const sfProfile = buildProfileFromDetails(sfDetails);
   const firstName = pickFirstNonEmpty(sfDetails.firstName, localMember?.firstName, localMember?.name?.split(/\s+/)[0]);
@@ -441,12 +472,10 @@ function mergeMemberProfile(sfDetails, localMember, portalData = null) {
       spiritual: localProfile.spiritual || sfProfile.spiritual,
     },
     contacts: effectivePortal.contacts || [],
-    relationships: effectivePortal.fromSalesforce
-      ? (effectivePortal.relationships || [])
-      : mergeArrayPreferRemote(effectivePortal.relationships, localMember?.syncedFromSalesforce ? localMember?.relationships : []),
+    relationships: effectivePortal.relationships || [],
     financials: buildFinancialsFromSources(localMember?.financials, effectivePortal),
     membership: deriveMembershipSummary(
-      effectivePortal.membership || (localMember?.syncedFromSalesforce ? localMember?.membership : null),
+      effectivePortal.membership,
       buildFinancialsFromSources(localMember?.financials, effectivePortal),
       {
         lifecycleStatus: pickFirstNonEmpty(
@@ -470,18 +499,12 @@ async function buildPortalSfData(email) {
   const portalData = await lookupSalesforcePortalData(email, memberDetails.contactId, memberDetails);
   const sfData = mergeMemberProfile(memberDetails, localMember, portalData);
 
-  if (portalData?.fromSalesforce || portalData?.contacts?.length) {
-    await db.syncPortalData(email, { ...portalData, fromSalesforce: true }, memberDetails.contactId);
-  }
-
   userSalesforceData[email] = sfData;
   return { sfData, memberDetails, portalData };
 }
 
 async function resolveAuthedEmail(token) {
-  const decoded = await verifyToken(token, {
-    secretKey: process.env.CLERK_SECRET_KEY,
-  });
+  const decoded = await verifyClerkSessionToken(token);
   const clerkUser = await clerkClient.users.getUser(decoded.sub);
   return {
     userId: decoded.sub,
@@ -693,11 +716,8 @@ app.get('/api/portal/dashboard', async (req, res) => {
 
   const token = authHeader.split(' ')[1];
   try {
-    // Verify Clerk JWT Session Token
-    const decoded = await verifyToken(token, {
-      secretKey: process.env.CLERK_SECRET_KEY,
-    });
-    
+    const decoded = await verifyClerkSessionToken(token);
+
     const userId = decoded.sub;
     authLog('DASHBOARD_AUTH_OK', { clerkUserId: userId });
     
@@ -790,7 +810,7 @@ app.post('/api/payments/create-checkout-session', async (req, res) => {
   if (authHeader?.startsWith('Bearer ') && !resolvedContactId) {
     try {
       const token = authHeader.split(' ')[1];
-      const decoded = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+      const decoded = await verifyClerkSessionToken(token);
       const clerkUser = await clerkClient.users.getUser(decoded.sub);
       const clerkEmail = clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase();
       resolvedContactId = userSalesforceData[clerkEmail]?.contactId || '';
@@ -861,11 +881,8 @@ app.post('/api/portal/update-profile', async (req, res) => {
     if (token === 'dev_token_for_testing') {
       email = (req.body.email || 'acc.appledev@gmail.com').toLowerCase();
     } else {
-      // Verify Clerk JWT Session Token
-      const decoded = await verifyToken(token, {
-        secretKey: process.env.CLERK_SECRET_KEY,
-      });
-      
+      const decoded = await verifyClerkSessionToken(token);
+
       const userId = decoded.sub;
       
       // Fetch user details from Clerk to get email

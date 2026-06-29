@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth, useUser, useClerk } from '@clerk/clerk-react';
 import { authTrace, authTraceClerkState } from './utils/authTrace';
 import { getEffectiveAuthState, tryRestoreOrClearSession } from './utils/clerkMagicLink';
+import { getFreshClerkToken } from './utils/clerkAuth';
 import { showToast } from './utils/toast';
 import Login from './components/Login';
 import Portal from './components/Portal';
@@ -9,6 +10,7 @@ import EmailLinkVerifier, { shouldRunEmailLinkVerifier } from './components/Emai
 import ToastHost from './components/shared/ToastHost';
 
 const LOGIN_SUCCESS_FLAG = 'show_login_success';
+const TOKEN_KEEPALIVE_MS = 30_000;
 
 function LoadingScreen({ message }) {
   return (
@@ -23,42 +25,50 @@ function AuthenticatedPortal({ onLogout, resolvedUserId }) {
   const clerk = useClerk();
   const { userId, getToken } = useAuth();
   const { user: hookUser } = useUser();
-  const [token, setToken] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const getTokenRef = useRef(getToken);
+  const clerkRef = useRef(clerk);
+
+  getTokenRef.current = getToken;
+  clerkRef.current = clerk;
 
   const activeUserId = userId || resolvedUserId || clerk.user?.id;
   const user = hookUser || clerk.user;
 
+  const getAuthToken = useCallback(
+    () => getFreshClerkToken(getTokenRef.current, clerkRef.current),
+    [],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
-    const loadToken = async () => {
+    const ensureSession = async () => {
       if (!activeUserId) {
-        setToken(null);
+        if (!cancelled) setAuthReady(false);
         return;
       }
-      try {
-        const t = await getToken?.().catch(() => null)
-          || await clerk.session?.getToken?.();
-        if (!cancelled) {
-          setToken(t);
-          if (t && sessionStorage.getItem(LOGIN_SUCCESS_FLAG)) {
-            sessionStorage.removeItem(LOGIN_SUCCESS_FLAG);
-            showToast({ message: 'Welcome! You are signed in successfully.', type: 'success' });
-          }
-        }
-      } catch (e) {
-        console.error('Failed to get Clerk token:', e);
-        if (!cancelled) setToken(null);
+
+      const token = await getAuthToken();
+      if (cancelled) return;
+
+      setAuthReady(Boolean(token));
+      if (token && sessionStorage.getItem(LOGIN_SUCCESS_FLAG)) {
+        sessionStorage.removeItem(LOGIN_SUCCESS_FLAG);
+        showToast({ message: 'Welcome! You are signed in successfully.', type: 'success' });
       }
     };
 
-    loadToken();
+    ensureSession();
+    const keepAlive = setInterval(ensureSession, TOKEN_KEEPALIVE_MS);
+
     return () => {
       cancelled = true;
+      clearInterval(keepAlive);
     };
-  }, [activeUserId, getToken, clerk]);
+  }, [activeUserId, getAuthToken]);
 
-  if (!activeUserId || !user || !token) {
+  if (!activeUserId || !user || !authReady) {
     return <LoadingScreen message="Loading your portal..." />;
   }
 
@@ -70,7 +80,7 @@ function AuthenticatedPortal({ onLogout, resolvedUserId }) {
         name: user.fullName || user.primaryEmailAddress?.emailAddress?.split('@')[0],
         role: 'Member',
       }}
-      token={token}
+      getAuthToken={getAuthToken}
       onLogout={onLogout}
     />
   );
