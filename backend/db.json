@@ -115,13 +115,13 @@
         "nickname": "Rohit",
         "title": "",
         "lifecycle": {
-          "hebrewName": "rohit ji update",
-          "fathersHebrewName": "rajesh jiupdate",
-          "mothersHebrewName": "seema ji update",
+          "hebrewName": "rohit ji update final",
+          "fathersHebrewName": "rajesh jiupdate final",
+          "mothersHebrewName": "seema ji update final",
           "jewish": "Jewish",
-          "hebrewBirthdate": "15 Tammuz, 5770 update",
+          "hebrewBirthdate": "15 Tammuz, 5770",
           "nextHebrewBirthday": "2026-06-30",
-          "weddingDate": "2026-06-23",
+          "weddingDate": "2026-06-01",
           "lifecycleStatus": "Living"
         },
         "additional": {
@@ -158,13 +158,13 @@
     {
       "id": "m7",
       "contactId": "005Jx000009VoMjIAK",
-      "name": "Mohd Ali Khan",
+      "name": "Mohd Khan",
       "email": "acc.appledev@gmail.com",
       "role": "Member",
       "status": "Active",
       "joinedDate": "2026-06-23",
       "profile": {
-        "accountName": "Mohd Ali Khan",
+        "accountName": "Mohd Khan",
         "phone": "(831) 925-4076",
         "street": "667 C AZAD NAGAR NEAR NOORANI MASJID GOAL CHOURAHA",
         "city": "INDORE",
@@ -176,6 +176,24 @@
           "kosher": "No",
           "hasPushka": "No",
           "datePushkaLastEmptied": ""
+        },
+        "homePhone": "+91 9569552954",
+        "nickname": "Mohd",
+        "title": "",
+        "lifecycle": {
+          "hebrewName": "update",
+          "fathersHebrewName": "update",
+          "mothersHebrewName": "update",
+          "jewish": "",
+          "hebrewBirthdate": "",
+          "nextHebrewBirthday": "",
+          "weddingDate": "",
+          "lifecycleStatus": "Living"
+        },
+        "additional": {
+          "birthdate": "",
+          "age": "",
+          "gender": ""
         }
       },
       "contacts": [

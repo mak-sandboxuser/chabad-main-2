@@ -3528,6 +3528,43 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: 16px;
 }
 
+.quick-pay-mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.quick-pay-mode-toggle button {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.quick-pay-mode-toggle button.active {
+  background: var(--color-primary);
+  color: #1a1a1a;
+  border-color: var(--color-primary);
+}
+
+.quick-pay-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.quick-payment-modal .profile-field-label {
+  margin-top: 8px;
+}
+
 .quick-pay-preset {
   border: 1px solid var(--border-color);
   background: rgba(255, 255, 255, 0.03);

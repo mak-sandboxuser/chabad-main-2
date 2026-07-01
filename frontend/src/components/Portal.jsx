@@ -17,6 +17,19 @@ import QuickPaymentModal from './shared/QuickPaymentModal';
 import { showToast } from '../utils/toast';
 import { fetchPortalApi } from '../utils/portalApi';
 
+const PENDING_CHECKOUT_SESSION_KEY = 'pending_checkout_session_id';
+
+async function syncCheckoutSession(sessionId, getAuthToken) {
+  if (!sessionId) return false;
+  await fetchPortalApi('/api/payments/confirm-checkout', {
+    getAuthToken,
+    method: 'POST',
+    body: { sessionId },
+  });
+  sessionStorage.removeItem(PENDING_CHECKOUT_SESSION_KEY);
+  return true;
+}
+
 export default function Portal({ user, getAuthToken, onLogout }) {
   const [stats, setStats] = useState(null);
   const [members, setMembers] = useState([]);
@@ -88,16 +101,69 @@ export default function Portal({ user, getAuthToken, onLogout }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('payment') === 'success') {
-      showToast({ message: 'Payment successful! Your records will update shortly.', type: 'success' });
-      setPaymentAlert({ type: 'success', message: 'Thank you! Your payment was completed and is being verified.' });
-      fetchDashboardData();
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (params.get('payment') === 'cancel') {
-      showToast({ message: 'Payment cancelled. No charges were made.', type: 'error' });
-      setPaymentAlert({ type: 'cancel', message: 'Payment cancelled. No charges were made.' });
-      window.history.replaceState({}, '', window.location.pathname);
+    const sessionId = params.get('session_id');
+    const isPaymentSuccess = params.get('payment') === 'success';
+    const isPaymentCancel = params.get('payment') === 'cancel';
+
+    if (isPaymentSuccess && sessionId) {
+      sessionStorage.setItem(PENDING_CHECKOUT_SESSION_KEY, sessionId);
     }
+
+    const handlePaymentReturn = async () => {
+      if (isPaymentSuccess) {
+        showToast({ message: 'Payment successful! Your records will update shortly.', type: 'success' });
+        setPaymentAlert({ type: 'success', message: 'Thank you! Your payment was completed and is being verified.' });
+
+        const checkoutSessionId = sessionId || sessionStorage.getItem(PENDING_CHECKOUT_SESSION_KEY);
+        if (checkoutSessionId) {
+          try {
+            await syncCheckoutSession(checkoutSessionId, getAuthToken);
+            setPaymentAlert({ type: 'success', message: 'Payment synced to ChabadOne CRM. Records will update shortly.' });
+          } catch (err) {
+            console.error('Payment sync error:', err);
+            setPaymentAlert({
+              type: 'success',
+              message: 'Payment received. Retrying CRM sync — refresh in a moment if records do not appear.',
+            });
+          }
+        }
+
+        await fetchDashboardData();
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (isPaymentCancel) {
+        showToast({ message: 'Payment cancelled. No charges were made.', type: 'error' });
+        setPaymentAlert({ type: 'cancel', message: 'Payment cancelled. No charges were made.' });
+        sessionStorage.removeItem(PENDING_CHECKOUT_SESSION_KEY);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    };
+
+    handlePaymentReturn();
+  }, [getAuthToken]);
+
+  useEffect(() => {
+    const pendingSessionId = sessionStorage.getItem(PENDING_CHECKOUT_SESSION_KEY);
+    if (!pendingSessionId) return undefined;
+
+    let cancelled = false;
+
+    const retrySync = async () => {
+      try {
+        await syncCheckoutSession(pendingSessionId, getAuthToken);
+        if (!cancelled) {
+          setPaymentAlert({ type: 'success', message: 'Payment synced to ChabadOne CRM. Records will update shortly.' });
+          await fetchDashboardData();
+        }
+      } catch {
+        // Keep pending session for a later retry when auth/token is ready.
+      }
+    };
+
+    retrySync();
+
+    return () => {
+      cancelled = true;
+    };
   }, [getAuthToken]);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);

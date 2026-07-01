@@ -18,6 +18,9 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkeyformagiclinks';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const CHECKOUT_SUCCESS_URL = `${FRONTEND_URL}/?payment=success&session_id={CHECKOUT_SESSION_ID}`;
+const CHECKOUT_CANCEL_URL = `${FRONTEND_URL}/?payment=cancel`;
+const processedCheckoutSessions = new Set();
 const SESSION_CLOCK_SKEW_MS = Number.parseInt(process.env.SESSION_CLOCK_SKEW_MS || '300000', 10);
 const DEV_LOCALHOST_ORIGIN = /^https?:\/\/localhost(?::\d+)?$/;
 
@@ -312,6 +315,76 @@ function deriveMembershipSummary(membership, financials, profile) {
   };
 }
 
+async function fetchFinancialsFromWebhook(webhookUrl, email, contactId, memberDetails = null) {
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: email.toLowerCase(),
+      contactId: contactId || '',
+      fetchPayments: true,
+      fetchFinancials: true,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error(`Make.com financials webhook returned ${response.status} for ${email} (${webhookUrl})`);
+    return null;
+  }
+
+  const text = await response.text();
+  console.log(`Make.com financials for ${email}:`, text.slice(0, 800));
+  const payload = parseMakePayload(text);
+  if (!payload) {
+    console.warn(`Make.com financials JSON parse failed for ${email}`);
+    return { fromSalesforce: false, payments: [], pledges: [], recurring: [] };
+  }
+  const parsed = extractPortalDataFromPayload(payload, memberDetails || {});
+  console.log(`Make.com financials parsed for ${email}:`, {
+    payments: parsed.payments?.length || 0,
+    pledges: parsed.pledges?.length || 0,
+    recurring: parsed.recurring?.length || 0,
+  });
+  return {
+    fromSalesforce: Boolean(
+      parsed.fromSalesforce
+      || parsed.payments.length
+      || parsed.pledges.length
+      || parsed.recurring.length,
+    ),
+    payments: parsed.payments || [],
+    pledges: parsed.pledges || [],
+    recurring: parsed.recurring || [],
+  };
+}
+
+async function lookupSalesforcePayments(email, contactId, memberDetails = null) {
+  const webhookUrl = process.env.MAKE_PAYMENTS_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return { fromSalesforce: false, payments: [], pledges: [], recurring: [] };
+  }
+
+  try {
+    let result = await fetchFinancialsFromWebhook(webhookUrl, email, contactId, memberDetails);
+    if (!result) return { fromSalesforce: false, payments: [], pledges: [], recurring: [] };
+
+    const hasAny = result.payments.length || result.pledges.length || result.recurring.length;
+    if (result.fromSalesforce && !hasAny) {
+      console.warn(`Make.com financials webhook returned empty for ${email} — retrying in 3s`);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const retry = await fetchFinancialsFromWebhook(webhookUrl, email, contactId, memberDetails);
+      if (retry && (retry.payments.length || retry.pledges.length || retry.recurring.length)) {
+        result = retry;
+      }
+    }
+
+    return result;
+  } catch (err) {
+    console.error(`Error calling Make.com financials webhook for ${email}:`, err);
+    return { fromSalesforce: false, payments: [], pledges: [], recurring: [] };
+  }
+}
+
 async function fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDetails = null) {
   const response = await fetch(webhookUrl, {
     method: 'POST',
@@ -497,10 +570,20 @@ async function buildPortalSfData(email) {
   const memberDetails = lookup.memberDetails;
   const localMember = await db.getMemberByEmail(email);
   const portalData = await lookupSalesforcePortalData(email, memberDetails.contactId, memberDetails);
-  const sfData = mergeMemberProfile(memberDetails, localMember, portalData);
+  const financialsData = await lookupSalesforcePayments(email, memberDetails.contactId, memberDetails);
+
+  const mergedPortal = {
+    ...portalData,
+    payments: financialsData.payments?.length ? financialsData.payments : (portalData.payments || []),
+    pledges: financialsData.pledges?.length ? financialsData.pledges : (portalData.pledges || []),
+    recurring: financialsData.recurring?.length ? financialsData.recurring : (portalData.recurring || []),
+    fromSalesforce: portalData.fromSalesforce || financialsData.fromSalesforce,
+  };
+
+  const sfData = mergeMemberProfile(memberDetails, localMember, mergedPortal);
 
   userSalesforceData[email] = sfData;
-  return { sfData, memberDetails, portalData };
+  return { sfData, memberDetails, portalData: mergedPortal };
 }
 
 async function resolveAuthedEmail(token) {
@@ -794,18 +877,7 @@ app.post('/api/portal/refresh', async (req, res) => {
 });
 
 // Stripe Checkout Session generation
-// Stripe Checkout Session generation
-app.post('/api/payments/create-checkout-session', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const { email, amount, contactId, purpose } = req.body;
-  if (!email || !amount) {
-    return res.status(400).json({ error: 'Email and amount are required.' });
-  }
-
-  if (!stripe) {
-    return res.status(500).json({ error: 'Stripe integration is not configured. Please add STRIPE_SECRET_KEY to backend .env file.' });
-  }
-
+async function resolveCheckoutContactId(authHeader, email, contactId = '') {
   let resolvedContactId = contactId || '';
   if (authHeader?.startsWith('Bearer ') && !resolvedContactId) {
     try {
@@ -815,11 +887,141 @@ app.post('/api/payments/create-checkout-session', async (req, res) => {
       const clerkEmail = clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase();
       resolvedContactId = userSalesforceData[clerkEmail]?.contactId || '';
     } catch {
-      // Non-blocking — checkout can proceed without contactId metadata.
+      // Non-blocking
+    }
+  }
+  if (!resolvedContactId && email) {
+    resolvedContactId = userSalesforceData[email.toLowerCase()]?.contactId || '';
+  }
+  return resolvedContactId;
+}
+
+function buildQuickPaymentPayload(body, contactId) {
+  const pledgeAmount = parseFloat(body.pledgeAmount) || 0;
+  const paymentAmount = parseFloat(body.paymentAmount) || 0;
+  const billingMode = body.billingMode === 'recurring' ? 'recurring' : 'regular';
+  return {
+    email: (body.email || '').toLowerCase(),
+    contactId,
+    accountId: body.accountId || '',
+    purpose: body.purpose || 'portal_payment',
+    paymentType: body.paymentType || 'Donation',
+    subType: body.subType || 'General',
+    memo: body.memo || '',
+    pledgeAmount,
+    paymentAmount,
+    billingMode,
+    isRecurring: billingMode === 'recurring' ? 'true' : 'false',
+    paymentDate: body.paymentDate || new Date().toISOString().split('T')[0],
+    source: 'member_portal',
+  };
+}
+
+async function triggerQuickPaymentWebhook(payload) {
+  const webhookUrl = process.env.MAKE_QUICK_PAYMENT_WEBHOOK_URL;
+  if (!webhookUrl) {
+    throw new Error('MAKE_QUICK_PAYMENT_WEBHOOK_URL is not configured.');
+  }
+
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Make.com quick payment webhook returned ${response.status}`);
+  }
+
+  return response.text();
+}
+
+async function triggerStripePaymentWebhook(payload) {
+  const webhookUrl = process.env.MAKE_STRIPE_PAYMENT_WEBHOOK_URL;
+  if (!webhookUrl) {
+    throw new Error('MAKE_STRIPE_PAYMENT_WEBHOOK_URL is not configured.');
+  }
+
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Make.com Stripe payment webhook returned ${response.status}`);
+  }
+
+  return response.text();
+}
+
+function buildPayloadFromCheckoutSession(session) {
+  const metadata = session.metadata || {};
+  const email = (metadata.email || session.customer_email || session.customer_details?.email || '').toLowerCase();
+  const paymentAmount = parseFloat(metadata.paymentAmount) || (session.amount_total ? session.amount_total / 100 : 0);
+  const pledgeAmount = parseFloat(metadata.pledgeAmount) || 0;
+  const billingMode = metadata.billingMode === 'recurring' ? 'recurring' : 'regular';
+
+  return {
+    email,
+    contactId: metadata.contactId || '',
+    accountId: metadata.accountId || '',
+    purpose: metadata.purpose || 'portal_payment',
+    paymentType: metadata.paymentType || 'Donation',
+    subType: metadata.subType || 'General',
+    memo: metadata.memo || '',
+    pledgeAmount,
+    paymentAmount,
+    billingMode,
+    isRecurring: metadata.isRecurring === 'true' || billingMode === 'recurring' ? 'true' : 'false',
+    paymentDate: metadata.paymentDate || new Date().toISOString().split('T')[0],
+    source: metadata.source || 'member_portal',
+    stripeSessionId: session.id,
+    stripePaymentStatus: session.payment_status,
+    stripePaymentIntentId: typeof session.payment_intent === 'string'
+      ? session.payment_intent
+      : session.payment_intent?.id || '',
+  };
+}
+
+app.post('/api/payments/quick-payment', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const body = req.body || {};
+  const email = (body.email || '').toLowerCase();
+  const pledgeAmount = parseFloat(body.pledgeAmount) || 0;
+  const paymentAmount = parseFloat(body.paymentAmount) || 0;
+  const billingMode = body.billingMode === 'recurring' ? 'recurring' : 'regular';
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required.' });
+  }
+  if (pledgeAmount <= 0 && paymentAmount <= 0) {
+    return res.status(400).json({ error: 'Enter a pledge amount and/or payment amount.' });
+  }
+
+  const contactId = await resolveCheckoutContactId(authHeader, email, body.contactId || '');
+  const payload = buildQuickPaymentPayload(body, contactId);
+
+  // Pledge-only or recurring setup without immediate Stripe charge
+  if (paymentAmount <= 0) {
+    try {
+      await triggerQuickPaymentWebhook(payload);
+      const message = billingMode === 'recurring'
+        ? 'Recurring billing profile created in ChabadOne CRM.'
+        : 'Pledge saved to ChabadOne CRM.';
+      return res.json({ success: true, message });
+    } catch (error) {
+      console.error('Quick payment webhook error:', error);
+      return res.status(500).json({ error: error.message });
     }
   }
 
+  if (!stripe) {
+    return res.status(500).json({ error: 'Stripe integration is not configured.' });
+  }
+
   try {
+    const checkoutLabel = [payload.paymentType, payload.subType].filter(Boolean).join(' — ');
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       customer_email: email,
@@ -827,8 +1029,120 @@ app.post('/api/payments/create-checkout-session', async (req, res) => {
         price_data: {
           currency: 'usd',
           product_data: {
-            name: purpose || 'Chabad Bedford Payment',
-            description: 'Secure payment for membership, pledges, or contributions.',
+            name: checkoutLabel || payload.purpose,
+            description: payload.memo || `Portal: ${payload.paymentType} / ${payload.subType}`,
+          },
+          unit_amount: Math.round(paymentAmount * 100),
+        },
+        quantity: 1,
+      }],
+      mode: 'payment',
+      metadata: {
+        ...payload,
+        pledgeAmount: String(pledgeAmount),
+        paymentAmount: String(paymentAmount),
+      },
+      success_url: CHECKOUT_SUCCESS_URL,
+      cancel_url: CHECKOUT_CANCEL_URL,
+    });
+
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error('Error creating Stripe Checkout Session:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/payments/confirm-checkout', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const sessionId = (req.body?.sessionId || req.body?.session_id || '').trim();
+
+  console.log(`[PAYMENT] confirm-checkout requested for session: ${sessionId || '(missing)'}`);
+
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId is required.' });
+  }
+  if (!stripe) {
+    return res.status(500).json({ error: 'Stripe integration is not configured.' });
+  }
+
+  try {
+    const token = authHeader.split(' ')[1];
+    let userEmail = '';
+    if (token === 'dev_token_for_testing') {
+      userEmail = (req.body.email || 'acc.appledev@gmail.com').toLowerCase();
+    } else {
+      const decoded = await verifyClerkSessionToken(token);
+      const clerkUser = await clerkClient.users.getUser(decoded.sub);
+      userEmail = clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase() || '';
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({ error: 'No email address found for this user.' });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({ error: 'Payment is not completed yet.' });
+    }
+
+    const payload = buildPayloadFromCheckoutSession(session);
+    if (payload.email && payload.email !== userEmail) {
+      return res.status(403).json({ error: 'This checkout session does not belong to the signed-in user.' });
+    }
+    if (!payload.email) {
+      payload.email = userEmail;
+    }
+
+    if (processedCheckoutSessions.has(sessionId)) {
+      return res.json({ success: true, alreadyProcessed: true, message: 'Payment already synced to ChabadOne CRM.' });
+    }
+
+    await triggerStripePaymentWebhook(payload);
+    processedCheckoutSessions.add(sessionId);
+
+    console.log(`[PAYMENT] confirm-checkout synced to Make.com for ${payload.email}, amount: ${payload.paymentAmount}`);
+    res.json({ success: true, message: 'Payment synced to ChabadOne CRM.' });
+  } catch (error) {
+    console.error('Error confirming Stripe checkout:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/payments/create-checkout-session', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const {
+    email,
+    amount,
+    contactId,
+    purpose,
+    paymentType = 'Donation',
+    subType = 'General',
+    memo = '',
+  } = req.body;
+  if (!email || !amount) {
+    return res.status(400).json({ error: 'Email and amount are required.' });
+  }
+
+  if (!stripe) {
+    return res.status(500).json({ error: 'Stripe integration is not configured. Please add STRIPE_SECRET_KEY to backend .env file.' });
+  }
+
+  try {
+    const resolvedContactId = await resolveCheckoutContactId(authHeader, email, contactId || '');
+    const checkoutLabel = [paymentType, subType].filter(Boolean).join(' — ');
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      customer_email: email,
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: checkoutLabel || purpose || 'Chabad Bedford Payment',
+            description: memo || `Portal payment: ${paymentType}${subType ? ` / ${subType}` : ''}`,
           },
           unit_amount: Math.round(amount * 100),
         },
@@ -839,9 +1153,17 @@ app.post('/api/payments/create-checkout-session', async (req, res) => {
         email: email.toLowerCase(),
         contactId: resolvedContactId,
         purpose: purpose || 'portal_payment',
+        paymentType,
+        subType,
+        memo: memo || '',
+        source: 'member_portal',
+        pledgeAmount: '0',
+        paymentAmount: String(amount),
+        billingMode: 'regular',
+        isRecurring: 'false',
       },
-      success_url: `${FRONTEND_URL}/?payment=success`,
-      cancel_url: `${FRONTEND_URL}/?payment=cancel`,
+      success_url: CHECKOUT_SUCCESS_URL,
+      cancel_url: CHECKOUT_CANCEL_URL,
     });
 
     res.json({ url: session.url });
