@@ -89,6 +89,12 @@ body {
   min-height: 100vh;
 }
 
+html:has(.chabad-login-layout),
+body:has(.chabad-login-layout) {
+  height: 100%;
+  overflow: hidden;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   font-weight: 600;
@@ -203,7 +209,9 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Chabad Bedford Login Page Clone Styles */
 .chabad-login-layout {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-main);
@@ -211,12 +219,14 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-body);
   transition: background-color 0.4s ease, color 0.4s ease;
   position: relative;
+  overflow: hidden;
 }
 
 /* Header */
 .chabad-header {
-  height: 90px;
-  padding: 0 60px;
+  height: 64px;
+  flex-shrink: 0;
+  padding: 0 48px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -313,71 +323,125 @@ h1, h2, h3, h4, h5, h6 {
 /* Main Layout Split */
 .chabad-main-content {
   flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  padding: 0 60px;
-  gap: 40px;
+  grid-template-columns: minmax(0, 1.32fr) minmax(0, 0.68fr);
+  padding: 0 48px;
+  gap: 32px;
   position: relative;
+  align-items: center;
+  overflow: hidden;
 }
 
 /* Left Info Panel */
 .info-panel {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 20px 0 0;
+  justify-content: center;
+  padding: 8px 0;
   position: relative;
   overflow: hidden;
-  min-height: 520px;
+  min-height: 0;
+  height: 100%;
 }
 
-/* Dark gradient overlay that covers bottom area where building sketch is */
 .info-panel::after {
   content: "";
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 50%;
+  height: 38%;
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    rgba(6, 10, 18, 0.4) 35%,
-    rgba(4, 7, 14, 0.92) 100%
+    rgba(6, 10, 18, 0.35) 40%,
+    rgba(4, 7, 14, 0.88) 100%
   );
   pointer-events: none;
   z-index: 0;
 }
 
 .info-content {
-  max-width: 520px;
+  width: 100%;
+  max-width: none;
   z-index: 2;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.info-top-row {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+  flex: 1;
+  min-height: 0;
+}
+
+.welcome-block {
+  min-width: 0;
+}
+
+.features-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.feature-point-card {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 13px 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.feature-point-card--highlight {
+  border-color: rgba(200, 148, 63, 0.28);
+  background: rgba(200, 148, 63, 0.07);
+}
+
+.light-theme .feature-point-card {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(0, 27, 61, 0.08);
+}
+
+.light-theme .feature-point-card--highlight {
+  background: rgba(176, 141, 87, 0.1);
+  border-color: rgba(176, 141, 87, 0.28);
 }
 
 .welcome-heading {
   font-family: var(--font-serif);
-  font-size: 54px;
+  font-size: clamp(36px, 4.2vw, 48px);
   font-weight: 700;
   color: var(--text-primary);
-  line-height: 1.1;
+  line-height: 1.08;
 }
 
 .membership-heading {
   font-family: var(--font-serif);
-  font-size: 44px;
+  font-size: clamp(30px, 3.5vw, 40px);
   font-weight: 400;
   font-style: italic;
   color: var(--color-accent);
-  line-height: 1.15;
-  margin-top: 4px;
+  line-height: 1.12;
+  margin-top: 2px;
 }
 
 .gold-diamond-divider {
   display: flex;
   align-items: center;
   gap: 0;
-  margin: 22px 0 24px;
-  max-width: 280px;
+  margin: 14px 0 16px;
+  max-width: 260px;
 }
 
 .gold-diamond-divider::before,
@@ -401,28 +465,47 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .intro-text {
-  font-size: 16px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.55;
   color: var(--text-secondary);
-  margin-bottom: 32px;
+  margin-bottom: 0;
+  max-width: 100%;
 }
 
 .features-list {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 12px;
+  margin-top: 0;
 }
 
 .feature-item {
   display: flex;
-  gap: 20px;
+  gap: 16px;
   align-items: flex-start;
 }
 
+.household-feature-card {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-top: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(200, 148, 63, 0.22);
+  background: rgba(200, 148, 63, 0.06);
+  max-width: none;
+}
+
+.light-theme .household-feature-card {
+  background: rgba(176, 141, 87, 0.08);
+  border-color: rgba(176, 141, 87, 0.25);
+}
+
 .feature-icon-badge {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   background: var(--color-primary-light);
   color: var(--color-primary);
@@ -449,19 +532,19 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .feature-text h3 {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .feature-text p {
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
-/* Building Sketch PNG — AI-generated architectural line art */
+/* Building sketch on login — floated up beside content */
 .building-sketch {
   width: 100%;
   max-width: 520px;
@@ -474,6 +557,32 @@ h1, h2, h3, h4, h5, h6 {
   object-fit: contain;
   object-position: left bottom;
   opacity: 0.72;
+}
+
+.building-sketch--login {
+  position: static;
+  transform: none;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  align-self: stretch;
+  opacity: 1;
+  z-index: 1;
+  flex-shrink: 1;
+  min-height: 0;
+  max-height: min(42vh, 340px);
+  height: auto;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.light-theme .building-sketch--login {
+  opacity: 0.92;
+}
+
+:not(.light-theme) .building-sketch--login {
+  opacity: 0.85;
+  filter: none;
 }
 
 :not(.light-theme) .building-sketch {
@@ -496,14 +605,15 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 20px 0 60px;
+  padding: 8px 0;
+  min-height: 0;
 }
 
 .login-card-wrapper {
   width: 100%;
-  max-width: 470px;
-  padding: 44px 44px 36px;
-  border-radius: 20px;
+  max-width: 460px;
+  padding: 30px 34px 26px;
+  border-radius: 22px;
   border: 1px solid var(--border-color);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
   background: rgba(14, 20, 32, 0.95);
@@ -521,7 +631,7 @@ h1, h2, h3, h4, h5, h6 {
 .card-top-icon {
   display: flex;
   justify-content: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .card-emblem {
@@ -542,7 +652,7 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-secondary);
   text-align: center;
   line-height: 1.5;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .auth-error-box {
@@ -563,7 +673,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .input-field-group {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .input-field-label {
@@ -670,7 +780,7 @@ h1, h2, h3, h4, h5, h6 {
   gap: 8px;
   font-size: 12.5px;
   color: var(--text-secondary);
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .note-icon {
@@ -680,7 +790,7 @@ h1, h2, h3, h4, h5, h6 {
 .card-divider-line {
   display: flex;
   align-items: center;
-  margin: 24px 0;
+  margin: 14px 0;
 }
 
 .card-divider-line::before, .card-divider-line::after {
@@ -728,7 +838,7 @@ h1, h2, h3, h4, h5, h6 {
   gap: 6px;
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 24px;
+  margin-top: 16px;
 }
 
 /* Success State Panel */
@@ -756,20 +866,21 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Footer Section */
 .chabad-footer {
-  padding: 0 60px 40px;
+  flex-shrink: 0;
+  padding: 0 48px 16px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
   z-index: 5;
 }
 
 .footer-card {
-  padding: 24px 40px;
-  border-radius: 16px;
+  padding: 14px 24px;
+  border-radius: 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
   flex-wrap: wrap;
 }
 
@@ -781,8 +892,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .security-badge {
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: var(--color-primary-light);
   color: var(--color-primary);
@@ -793,16 +904,16 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .security-text h4 {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 2px;
 }
 
 .security-text p {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .footer-links {
@@ -830,12 +941,19 @@ h1, h2, h3, h4, h5, h6 {
 
 .copyright-text {
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
+  margin: 0;
 }
 
 /* Responsive Media Queries */
 @media (max-width: 991px) {
+  .chabad-login-layout {
+    height: auto;
+    max-height: none;
+    overflow: auto;
+  }
+
   .chabad-header {
     padding: 0 32px;
   }
@@ -844,18 +962,35 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: 1fr;
     padding: 0 32px;
     gap: 20px;
+    overflow: visible;
   }
   
   .info-panel {
     padding: 20px 0;
+    height: auto;
+  }
+
+  .info-top-row {
+    gap: 12px;
+  }
+
+  .building-sketch--login {
+    width: 100%;
+    max-height: min(38vh, 280px);
+    margin: 0;
+    opacity: 0.85;
   }
   
-  .building-sketch {
+  .building-sketch:not(.building-sketch--login) {
     display: none;
   }
   
   .form-panel {
     padding: 20px 0 40px;
+  }
+
+  .login-card-wrapper {
+    max-height: none;
   }
   
   .chabad-footer {
@@ -2120,7 +2255,7 @@ h1, h2, h3, h4, h5, h6 {
 .portal-page-layout {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 .portal-breadcrumbs {
@@ -2198,6 +2333,7 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 12px;
   color: var(--text-muted);
   flex-wrap: wrap;
+  padding: 4px 0 8px;
 }
 
 .portal-secure-badge {
@@ -2257,27 +2393,63 @@ h1, h2, h3, h4, h5, h6 {
 
 .membership-page-grid {
   display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 28px;
   align-items: start;
+}
+
+.membership-main {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+}
+
+.membership-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  position: sticky;
+  top: calc(var(--header-height) + 24px);
+}
+
+.membership-hero-badge-row {
+  display: flex;
+  align-items: center;
+  margin-top: -4px;
 }
 
 .membership-stats-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 16px;
 }
 
 .membership-stat-card {
-  padding: 14px;
+  padding: 20px 18px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  min-height: 128px;
 }
 
 .membership-stat-icon {
   color: var(--color-accent);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+.membership-stat-card .dash-stat-label {
+  margin-bottom: 2px;
+}
+
+.membership-stat-card strong {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.membership-stat-card small {
+  line-height: 1.45;
+  margin-top: 2px;
 }
 
 .role-badge {
@@ -2295,19 +2467,21 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .membership-details-card {
-  padding: 20px;
+  padding: 28px 32px;
 }
 
 .membership-details-card h3 {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
-  margin-bottom: 16px;
+  margin: 0 0 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .membership-detail-row {
   display: flex;
-  gap: 14px;
-  padding: 16px 0;
+  gap: 16px;
+  padding: 20px 0;
   border-bottom: 1px solid var(--border-color);
   align-items: flex-start;
 }
@@ -2330,25 +2504,28 @@ h1, h2, h3, h4, h5, h6 {
   display: block;
   font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
 }
 
 .membership-detail-body strong {
   display: block;
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.45;
 }
 
 .membership-detail-body small {
   display: block;
   font-size: 12px;
   color: var(--text-secondary);
-  margin-top: 4px;
+  margin-top: 6px;
+  line-height: 1.5;
 }
 
 .membership-thanks-card {
   display: flex;
-  gap: 16px;
-  padding: 20px;
+  gap: 18px;
+  padding: 28px 32px;
   align-items: flex-start;
 }
 
@@ -2358,31 +2535,70 @@ h1, h2, h3, h4, h5, h6 {
 
 .membership-thanks-card strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  font-size: 15px;
 }
 
 .membership-thanks-card p {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
+  margin: 0;
 }
 
 .membership-renewal-card {
-  padding: 20px;
+  padding: 28px 24px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
+}
+
+.membership-renewal-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.membership-renewal-card .dash-btn-gold {
+  margin-top: 6px;
 }
 
 .membership-renewal-amount {
   font-size: 13px;
   color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.membership-rail .dash-rail-card {
+  padding: 24px;
+}
+
+.membership-rail .dash-rail-card h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.membership-rail .dash-actions-list {
+  gap: 12px;
 }
 
 .dash-action-btn.stacked {
   align-items: flex-start;
   height: auto;
-  padding: 14px;
+  padding: 16px;
+  gap: 12px;
+}
+
+.dash-action-btn.stacked > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-action-btn.stacked span {
+  display: block;
+  line-height: 1.4;
 }
 
 .dash-action-btn.stacked small {
@@ -2390,7 +2606,8 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 11px;
   color: var(--text-muted);
   font-weight: 400;
-  margin-top: 2px;
+  margin-top: 4px;
+  line-height: 1.45;
 }
 
 .household-summary-banner {
@@ -2960,8 +3177,16 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: 1fr 1fr;
   }
 
+  .membership-page-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .membership-rail {
+    position: static;
+  }
+
   .membership-stats-row {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   }
 
   .financial-top-card {
@@ -3286,9 +3511,38 @@ h1, h2, h3, h4, h5, h6 {
   outline: none;
 }
 
-.profile-field-select {
+.profile-field-select,
+.quick-payment-modal select.profile-field-input {
   cursor: pointer;
   appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  color-scheme: dark;
+  background-color: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0aec0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 40px;
+}
+
+.profile-field-select option,
+.quick-payment-modal select option {
+  background-color: #0e1420;
+  color: #ffffff;
+}
+
+.light-theme .profile-field-select,
+.light-theme .quick-payment-modal select.profile-field-input {
+  color-scheme: light;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234a5568' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+.light-theme .profile-field-select option,
+.light-theme .quick-payment-modal select option {
+  background-color: #ffffff;
+  color: #001b3d;
 }
 
 @media (max-width: 768px) {
@@ -3563,6 +3817,22 @@ h1, h2, h3, h4, h5, h6 {
 
 .quick-payment-modal .profile-field-label {
   margin-top: 8px;
+}
+
+.quick-payment-modal .profile-field-box--editable {
+  overflow: visible;
+}
+
+.quick-payment-modal input[type="date"] {
+  color-scheme: dark;
+}
+
+.light-theme .quick-payment-modal input[type="date"] {
+  color-scheme: light;
+}
+
+.quick-payment-modal .quick-pay-grid > div {
+  min-width: 0;
 }
 
 .quick-pay-preset {

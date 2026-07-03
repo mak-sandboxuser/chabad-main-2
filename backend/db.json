@@ -30,8 +30,8 @@
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InJhamVzaHJvaGl0a3VtYXJsdHBAZ21haWwuY29tIiwidXNlcklkIjoiNCIsImlhdCI6MTc4MTgwNjk2MywiZXhwIjoxNzgxODA3ODYzfQ.BqEFqzmJCpdSHUX5IIWFFLjGuOMIrN1mIKSBPN2iH4s"
   ],
   "dashboardStats": {
-    "totalMembers": 6,
-    "monthlyDonations": 12500,
+    "totalMembers": 9,
+    "monthlyDonations": 12712,
     "upcomingEventsCount": 8,
     "activeMinistries": 14
   },
@@ -85,8 +85,28 @@
       "joinedDate": "2026-06-23",
       "contactId": "003Jx00001ZtMGAIA3",
       "financials": {
-        "totalPayments": 50,
+        "totalPayments": 159,
         "payments": [
+          {
+            "id": "p_stripe_cs_test_a1eCOR87J0LxFT0GbdZPytOM4B53yz7jNdHm0D5O4Igh3xOX6G3t5hqDFb",
+            "amount": "$99.00",
+            "total": "$99.00",
+            "totalPledged": "$99.00",
+            "date": "2026-07-03",
+            "type": "Donation / General",
+            "method": "Stripe",
+            "status": "Paid"
+          },
+          {
+            "id": "p_stripe_cs_test_a1ihxqFaZ5ZxCm8f46gst2B9RP0CZf7rcOXpvniLOUg8X7Nx0Zi8dZtX8Q",
+            "amount": "$10.00",
+            "total": "$10.00",
+            "totalPledged": "$10.00",
+            "date": "2026-07-03",
+            "type": "Donation / General",
+            "method": "Stripe",
+            "status": "Paid"
+          },
           {
             "id": "p_stripe_1782194089444",
             "amount": "$50.00",
@@ -157,7 +177,8 @@
     },
     {
       "id": "m7",
-      "contactId": "005Jx000009VoMjIAK",
+      "contactId": "003Jx00001ZtPkHIAV",
+      "accountId": "001Jx00001ngpkXIAQ",
       "name": "Mohd Khan",
       "email": "acc.appledev@gmail.com",
       "role": "Member",
@@ -181,13 +202,13 @@
         "nickname": "Mohd",
         "title": "",
         "lifecycle": {
-          "hebrewName": "update",
-          "fathersHebrewName": "update",
-          "mothersHebrewName": "update",
+          "hebrewName": "rj update",
+          "fathersHebrewName": "rjjj update",
+          "mothersHebrewName": "rj",
           "jewish": "",
           "hebrewBirthdate": "",
           "nextHebrewBirthday": "",
-          "weddingDate": "",
+          "weddingDate": "2026-07-01",
           "lifecycleStatus": "Living"
         },
         "additional": {
@@ -206,8 +227,19 @@
       ],
       "relationships": [],
       "financials": {
-        "totalPayments": 0,
-        "payments": []
+        "totalPayments": 101,
+        "payments": [
+          {
+            "id": "p_stripe_cs_test_a1jZMEVS5yrJhFdRT5n3s5ZdwyeCtuvod8yBuzximJ5ERNSraC6hBzsuXf",
+            "amount": "$101.00",
+            "total": "$101.00",
+            "totalPledged": "$101.00",
+            "date": "2026-07-03",
+            "type": "Donation / General",
+            "method": "Stripe",
+            "status": "Paid"
+          }
+        ]
       }
     },
     {
@@ -245,6 +277,39 @@
       "financials": {
         "totalPayments": 0,
         "payments": []
+      }
+    },
+    {
+      "id": "m9",
+      "name": "test",
+      "email": "test@test.com",
+      "role": "Member",
+      "status": "Active",
+      "joinedDate": "2026-07-03",
+      "financials": {
+        "totalPayments": 2,
+        "payments": [
+          {
+            "id": "p_stripe_1783081777353",
+            "amount": "$1.00",
+            "total": "$1.00",
+            "totalPledged": "$1.00",
+            "date": "2026-07-03",
+            "type": "General Donation",
+            "method": "Stripe",
+            "status": "Paid"
+          },
+          {
+            "id": "p_stripe_1783081329292",
+            "amount": "$1.00",
+            "total": "$1.00",
+            "totalPledged": "$1.00",
+            "date": "2026-07-03",
+            "type": "General Donation",
+            "method": "Stripe",
+            "status": "Paid"
+          }
+        ]
       }
     }
   ],

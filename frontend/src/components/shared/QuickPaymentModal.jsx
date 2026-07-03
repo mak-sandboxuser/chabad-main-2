@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DollarSign, Lock, RefreshCw, X } from 'lucide-react';
 import { fetchPortalApi } from '../../utils/portalApi';
-import { PAYMENT_SUBTYPES, PAYMENT_TYPES } from '../../constants/paymentOptions';
+import { showToast } from '../../utils/toast';
+import { PAYMENT_SUBTYPES, PAYMENT_TYPES, RECURRING_FREQUENCIES } from '../../constants/paymentOptions';
 
 function todayIsoDate() {
   return new Date().toISOString().split('T')[0];
@@ -13,6 +14,7 @@ export default function QuickPaymentModal({
   user,
   getAuthToken,
   sfData,
+  onSuccess,
   purpose = 'Chabad Bedford Payment',
 }) {
   const [billingMode, setBillingMode] = useState('regular');
@@ -21,8 +23,22 @@ export default function QuickPaymentModal({
   const [memo, setMemo] = useState('');
   const [pledgeAmount, setPledgeAmount] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [frequency, setFrequency] = useState('Monthly');
   const [paymentDate, setPaymentDate] = useState(todayIsoDate());
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setBillingMode('regular');
+    setPaymentType('Donation');
+    setSubType('General');
+    setMemo('');
+    setPledgeAmount('');
+    setPaymentAmount('');
+    setFrequency('Monthly');
+    setPaymentDate(todayIsoDate());
+    setLoading(false);
+  }, [open]);
 
   if (!open) return null;
 
@@ -33,7 +49,11 @@ export default function QuickPaymentModal({
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (parsedPledge <= 0 && parsedPayment <= 0) {
-      alert('Enter a Pledge Amount and/or Payment Amount.');
+      showToast({ message: 'Enter a Pledge Amount and/or Payment Amount.', type: 'error' });
+      return;
+    }
+    if (isRecurring && parsedPledge <= 0 && parsedPayment <= 0) {
+      showToast({ message: 'Enter an amount for the recurring billing plan.', type: 'error' });
       return;
     }
 
@@ -53,25 +73,40 @@ export default function QuickPaymentModal({
           pledgeAmount: parsedPledge,
           paymentAmount: parsedPayment,
           billingMode,
+          frequency,
           paymentDate,
         },
       });
 
       if (data.url) {
+        showToast({ message: 'Redirecting to secure Stripe checkout...', type: 'success', duration: 2500 });
         window.location.href = data.url;
         return;
       }
 
       if (data.success) {
-        alert(data.message || 'Saved to ChabadOne CRM successfully.');
+        showToast({
+          message: data.message || 'Saved to ChabadOne CRM successfully.',
+          type: 'success',
+        });
+        if (onSuccess) {
+          await onSuccess();
+          window.setTimeout(() => { onSuccess(); }, 5000);
+        }
         onClose();
       }
     } catch (err) {
-      alert(err.message);
+      showToast({ message: err.message, type: 'error' });
     } finally {
       setLoading(false);
     }
   };
+
+  const submitLabel = parsedPayment > 0
+    ? (isRecurring ? 'Continue to Recurring Checkout' : 'Continue to Secure Checkout')
+    : isRecurring
+      ? 'Create Recurring Billing Plan'
+      : 'Save Pledge to CRM';
 
   return (
     <div className="portal-modal-backdrop">
@@ -83,7 +118,7 @@ export default function QuickPaymentModal({
           </button>
         </div>
         <p className="portal-modal-copy">
-          Same as ChabadOne CRM — pledge amount creates a pledge, payment amount charges Stripe, payment plan creates recurring billing.
+          Pledge creates a CRM commitment. Payment charges Stripe. Payment Plan sets up recurring billing in ChabadOne.
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -108,7 +143,7 @@ export default function QuickPaymentModal({
             <div>
               <label className="profile-field-label">Type</label>
               <div className="profile-field-box profile-field-box--editable">
-                <select className="profile-field-input" value={paymentType} onChange={(e) => setPaymentType(e.target.value)} required>
+                <select className="profile-field-input profile-field-select" value={paymentType} onChange={(e) => setPaymentType(e.target.value)} required>
                   {PAYMENT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
@@ -116,12 +151,23 @@ export default function QuickPaymentModal({
             <div>
               <label className="profile-field-label">Sub-Type</label>
               <div className="profile-field-box profile-field-box--editable">
-                <select className="profile-field-input" value={subType} onChange={(e) => setSubType(e.target.value)} required>
+                <select className="profile-field-input profile-field-select" value={subType} onChange={(e) => setSubType(e.target.value)} required>
                   {PAYMENT_SUBTYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
             </div>
           </div>
+
+          {isRecurring && (
+            <>
+              <label className="profile-field-label">Frequency</label>
+              <div className="profile-field-box profile-field-box--editable">
+                <select className="profile-field-input profile-field-select" value={frequency} onChange={(e) => setFrequency(e.target.value)} required>
+                  {RECURRING_FREQUENCIES.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </div>
+            </>
+          )}
 
           <label className="profile-field-label">Memo</label>
           <div className="profile-field-box profile-field-box--editable">
@@ -139,12 +185,14 @@ export default function QuickPaymentModal({
                   className="profile-field-input"
                   value={pledgeAmount}
                   onChange={(e) => setPledgeAmount(e.target.value)}
-                  placeholder="Commitment / aim"
+                  placeholder={isRecurring ? 'Optional commitment' : 'Commitment / aim'}
                 />
               </div>
             </div>
             <div>
-              <label className="profile-field-label">Payment Amount (USD)</label>
+              <label className="profile-field-label">
+                {isRecurring ? 'Recurring Amount (USD)' : 'Payment Amount (USD)'}
+              </label>
               <div className="profile-field-box profile-field-box--editable">
                 <input
                   type="number"
@@ -153,7 +201,7 @@ export default function QuickPaymentModal({
                   className="profile-field-input"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
-                  placeholder={isRecurring ? 'Recurring amount' : 'Pay now via Stripe'}
+                  placeholder={isRecurring ? 'Amount per billing cycle' : 'Pay now via Stripe'}
                 />
               </div>
             </div>
@@ -166,13 +214,7 @@ export default function QuickPaymentModal({
 
           <button type="submit" className="dash-btn-gold full-width" disabled={loading}>
             <Lock size={16} />
-            {loading
-              ? 'Processing...'
-              : parsedPayment > 0
-                ? 'Continue to Secure Checkout'
-                : isRecurring
-                  ? 'Create Recurring Billing'
-                  : 'Save Pledge to CRM'}
+            {loading ? 'Processing...' : submitLabel}
           </button>
         </form>
       </div>

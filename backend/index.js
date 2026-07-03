@@ -8,7 +8,6 @@ const db = require('./db');
 const {
   parseMakePayload,
   extractPortalDataFromPayload,
-  mergePaymentsRemoteAndLocal,
   filterNormalizedPayments,
 } = require('./portalDataMapper');
 
@@ -22,8 +21,22 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
 const CHECKOUT_SUCCESS_URL = `${FRONTEND_URL}/?payment=success&session_id={CHECKOUT_SESSION_ID}`;
 const CHECKOUT_CANCEL_URL = `${FRONTEND_URL}/?payment=cancel`;
 const processedCheckoutSessions = new Set();
+const processingCheckoutSessions = new Set();
 const SESSION_CLOCK_SKEW_MS = Number.parseInt(process.env.SESSION_CLOCK_SKEW_MS || '300000', 10);
 const DEV_LOCALHOST_ORIGIN = /^https?:\/\/localhost(?::\d+)?$/;
+const VERCEL_ORIGIN = /^https:\/\/([a-z0-9-]+\.)*vercel\.app$/i;
+
+function isAllowedCorsOrigin(origin) {
+  if (!origin) return true;
+  if (origin === FRONTEND_URL) return true;
+  if (DEV_LOCALHOST_ORIGIN.test(origin)) return true;
+  if (VERCEL_ORIGIN.test(origin)) return true;
+  const extras = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return extras.includes(origin);
+}
 
 async function verifyClerkSessionToken(token) {
   return verifyToken(token, {
@@ -34,7 +47,7 @@ async function verifyClerkSessionToken(token) {
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || origin === FRONTEND_URL || DEV_LOCALHOST_ORIGIN.test(origin)) {
+    if (isAllowedCorsOrigin(origin)) {
       callback(null, true);
       return;
     }
@@ -50,6 +63,21 @@ let devLastEmailUrl = '';
 // Cache Salesforce member profile details in memory
 let userSalesforceData = {};
 
+function sanitizeSalesforceId(value) {
+  const normalized = (value || '').trim();
+  return /^[a-zA-Z0-9]{15,18}$/.test(normalized) ? normalized : '';
+}
+
+function sanitizeContactId(value) {
+  const normalized = sanitizeSalesforceId(value);
+  return normalized.startsWith('003') ? normalized : '';
+}
+
+function sanitizeAccountId(value) {
+  const normalized = sanitizeSalesforceId(value);
+  return normalized.startsWith('001') ? normalized : '';
+}
+
 async function lookupSalesforceMember(email) {
   const emailLower = email.toLowerCase();
   const webhookUrl = process.env.MAKE_WEBHOOK_URL;
@@ -59,11 +87,6 @@ async function lookupSalesforceMember(email) {
     if (normalized.length < 2) return '';
     const blocked = new Set(['firstname', 'lastname', 'contactid', 'found', 'role', 'null', 'undefined']);
     return blocked.has(normalized.toLowerCase()) ? '' : normalized;
-  };
-
-  const sanitizeSalesforceId = (value) => {
-    const normalized = (value || '').trim();
-    return /^[a-zA-Z0-9]{15,18}$/.test(normalized) ? normalized : '';
   };
 
   if (!webhookUrl) {
@@ -110,10 +133,17 @@ async function lookupSalesforceMember(email) {
       return { found: false, error: 'unauthorized_member' };
     }
 
+    const contactId = sanitizeContactId(readField('contactId'));
+    if (!contactId) {
+      console.warn(
+        `Membership check rejected for ${emailLower}: Make returned found:true but no Salesforce contactId`
+      );
+      return { found: false, error: 'unauthorized_member' };
+    }
+
     const firstName = sanitizeName(readField('firstName'));
     const lastName = sanitizeName(readField('lastName'));
     const role = readField('role') || 'Member';
-    const contactId = sanitizeSalesforceId(readField('contactId'));
     const name = [firstName, lastName].filter(Boolean).join(' ').trim()
       || emailLower.split('@')[0];
 
@@ -153,7 +183,7 @@ async function lookupSalesforceMember(email) {
 
     const memberDetails = {
       contactId,
-      accountId: sanitizeSalesforceId(readField('accountId')),
+      accountId: sanitizeAccountId(readField('accountId')),
       firstName,
       lastName,
       name,
@@ -191,6 +221,14 @@ async function lookupSalesforceMember(email) {
     };
 
     memberDetails.portalData = extractPortalDataFromPayload(payload, memberDetails);
+
+    if (!memberDetails.accountId) {
+      const portalData = await lookupSalesforcePortalData(emailLower, contactId, memberDetails);
+      memberDetails.accountId = sanitizeAccountId(portalData.accountId) || memberDetails.accountId;
+      if (portalData.accountName) {
+        memberDetails.profile.accountName = portalData.accountName;
+      }
+    }
 
     return {
       found: true,
@@ -333,8 +371,13 @@ async function fetchFinancialsFromWebhook(webhookUrl, email, contactId, memberDe
     body: JSON.stringify({
       email: email.toLowerCase(),
       contactId: contactId || '',
+      accountId: memberDetails?.accountId || '',
       fetchPayments: true,
       fetchFinancials: true,
+      fetchPledges: true,
+      fetchRecurring: true,
+      pledgesLimit: 50,
+      paymentsLimit: 50,
     }),
   });
 
@@ -460,29 +503,14 @@ async function lookupSalesforcePortalData(email, contactId, memberDetails = null
   return extractPortalDataFromPayload(null, memberDetails || {});
 }
 
-function buildFinancialsFromSources(localFinancials = {}, portalData = {}) {
-  const filterPayments = (list = []) => filterNormalizedPayments(list);
-
-  if (portalData.fromSalesforce) {
-    const payments = filterPayments(portalData.payments || []);
-    const pledges = portalData.pledges || [];
-    const recurring = portalData.recurring || [];
-    const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount || item.total), 0);
-
-    return { totalPayments, payments, pledges, recurring };
-  }
-
-  const payments = filterPayments(mergePaymentsRemoteAndLocal(
-    portalData.payments || [],
-    localFinancials?.payments || [],
-  ));
-  const pledges = mergeArrayPreferRemote(portalData.pledges, localFinancials?.pledges);
-  const recurring = mergeArrayPreferRemote(portalData.recurring, localFinancials?.recurring);
-  const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount || item.total), 0)
-    || localFinancials.totalPayments
-    || 0;
+function buildFinancialsFromSources(portalData = {}) {
+  const payments = filterNormalizedPayments(portalData.payments || []);
+  const pledges = portalData.pledges || [];
+  const recurring = portalData.recurring || [];
+  const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount || item.total), 0);
 
   return {
+    fromSalesforce: Boolean(portalData.fromSalesforce),
     totalPayments,
     payments,
     pledges,
@@ -490,87 +518,82 @@ function buildFinancialsFromSources(localFinancials = {}, portalData = {}) {
   };
 }
 
-function mergeMemberProfile(sfDetails, localMember, portalData = null) {
+function mergeMemberProfile(sfDetails, portalData = null) {
   const effectivePortal = portalData ?? extractPortalDataFromPayload(null, sfDetails);
-  const localProfile = localMember?.profile || {};
   const sfProfile = buildProfileFromDetails(sfDetails);
-  const firstName = pickFirstNonEmpty(sfDetails.firstName, localMember?.firstName, localMember?.name?.split(/\s+/)[0]);
+  const firstName = pickFirstNonEmpty(sfDetails.firstName, sfDetails.name?.split(/\s+/)[0]);
   const lastName = pickFirstNonEmpty(
     sfDetails.lastName,
-    localMember?.lastName,
-    localMember?.name?.split(/\s+/).slice(1).join(' '),
+    sfDetails.name?.split(/\s+/).slice(1).join(' '),
   );
   const name = pickFirstNonEmpty(
     [firstName, lastName].filter(Boolean).join(' '),
     sfDetails.name,
-    localMember?.name,
     sfDetails.email?.split('@')[0],
   );
+  const financials = buildFinancialsFromSources(effectivePortal);
 
   return {
-    contactId: pickFirstNonEmpty(sfDetails.contactId, localMember?.contactId),
-    accountId: pickFirstNonEmpty(effectivePortal?.accountId, sfDetails.accountId, localMember?.accountId),
+    contactId: pickFirstNonEmpty(sfDetails.contactId, effectivePortal.contacts?.[0]?.contactId),
+    accountId: pickFirstNonEmpty(effectivePortal?.accountId, sfDetails.accountId),
     firstName,
     lastName,
     name,
-    email: pickFirstNonEmpty(sfDetails.email, localMember?.email),
-    role: pickFirstNonEmpty(sfDetails.role, localMember?.role, 'Member'),
+    email: sfDetails.email,
+    role: pickFirstNonEmpty(sfDetails.role, 'Member'),
     account: {
-      id: pickFirstNonEmpty(effectivePortal?.accountId, sfDetails.accountId, localMember?.accountId),
-      name: pickFirstNonEmpty(effectivePortal?.accountName, localProfile.accountName, sfProfile.accountName, name),
-      phone: pickFirstNonEmpty(effectivePortal?.phone, sfProfile.phone, localProfile.phone),
-      email: pickFirstNonEmpty(effectivePortal?.email, sfDetails.email, localMember?.email),
-      street: pickFirstNonEmpty(effectivePortal?.street, sfProfile.street, localProfile.street),
-      city: pickFirstNonEmpty(effectivePortal?.city, sfProfile.city, localProfile.city),
-      state: pickFirstNonEmpty(effectivePortal?.state, sfProfile.state, localProfile.state),
-      postalCode: pickFirstNonEmpty(effectivePortal?.postalCode, sfProfile.postalCode, localProfile.postalCode),
-      country: pickFirstNonEmpty(effectivePortal?.country, sfProfile.country, localProfile.country),
+      id: pickFirstNonEmpty(effectivePortal?.accountId, sfDetails.accountId),
+      name: pickFirstNonEmpty(effectivePortal?.accountName, sfProfile.accountName, name),
+      phone: pickFirstNonEmpty(effectivePortal?.phone, sfProfile.phone, sfProfile.mobile),
+      email: pickFirstNonEmpty(effectivePortal?.email, sfDetails.email),
+      street: pickFirstNonEmpty(effectivePortal?.street, sfProfile.street),
+      city: pickFirstNonEmpty(effectivePortal?.city, sfProfile.city),
+      state: pickFirstNonEmpty(effectivePortal?.state, sfProfile.state),
+      postalCode: pickFirstNonEmpty(effectivePortal?.postalCode, sfProfile.postalCode),
+      country: pickFirstNonEmpty(effectivePortal?.country, sfProfile.country),
     },
     profile: {
       ...sfProfile,
-      accountName: pickFirstNonEmpty(effectivePortal?.accountName, sfProfile.accountName, localProfile.accountName, name),
-      phone: pickFirstNonEmpty(sfProfile.phone, sfProfile.mobile, localProfile.phone),
-      mobile: pickFirstNonEmpty(sfProfile.mobile, sfProfile.phone, localProfile.phone),
-      homePhone: pickFirstNonEmpty(sfProfile.homePhone, localProfile.homePhone),
-      street: pickFirstNonEmpty(sfProfile.street, localProfile.street),
-      city: pickFirstNonEmpty(sfProfile.city, localProfile.city),
-      state: pickFirstNonEmpty(sfProfile.state, localProfile.state),
-      postalCode: pickFirstNonEmpty(sfProfile.postalCode, localProfile.postalCode),
-      country: pickFirstNonEmpty(sfProfile.country, localProfile.country),
-      nickname: pickFirstNonEmpty(sfProfile.nickname, localProfile.nickname),
-      title: pickFirstNonEmpty(sfProfile.title, localProfile.title),
+      accountName: pickFirstNonEmpty(effectivePortal?.accountName, sfProfile.accountName, name),
+      phone: pickFirstNonEmpty(sfProfile.phone, sfProfile.mobile, effectivePortal?.phone),
+      mobile: pickFirstNonEmpty(sfProfile.mobile, sfProfile.phone, effectivePortal?.phone),
+      homePhone: pickFirstNonEmpty(sfProfile.homePhone),
+      street: pickFirstNonEmpty(sfProfile.street, effectivePortal?.street),
+      city: pickFirstNonEmpty(sfProfile.city, effectivePortal?.city),
+      state: pickFirstNonEmpty(sfProfile.state, effectivePortal?.state),
+      postalCode: pickFirstNonEmpty(sfProfile.postalCode, effectivePortal?.postalCode),
+      country: pickFirstNonEmpty(sfProfile.country, effectivePortal?.country),
+      nickname: pickFirstNonEmpty(sfProfile.nickname),
+      title: pickFirstNonEmpty(sfProfile.title),
       lifecycle: {
-        hebrewName: pickFirstNonEmpty(sfProfile.lifecycle?.hebrewName, localProfile.lifecycle?.hebrewName, sfProfile.hebrewName),
-        fathersHebrewName: pickFirstNonEmpty(sfProfile.lifecycle?.fathersHebrewName, localProfile.lifecycle?.fathersHebrewName, sfProfile.fathersHebrewName),
-        mothersHebrewName: pickFirstNonEmpty(sfProfile.lifecycle?.mothersHebrewName, localProfile.lifecycle?.mothersHebrewName, sfProfile.mothersHebrewName),
-        jewish: pickFirstNonEmpty(sfProfile.lifecycle?.jewish, localProfile.lifecycle?.jewish, sfProfile.jewish),
-        hebrewBirthdate: pickFirstNonEmpty(sfProfile.lifecycle?.hebrewBirthdate, localProfile.lifecycle?.hebrewBirthdate, sfProfile.hebrewBirthdate),
-        nextHebrewBirthday: pickFirstNonEmpty(sfProfile.lifecycle?.nextHebrewBirthday, localProfile.lifecycle?.nextHebrewBirthday, sfProfile.nextHebrewBirthday),
-        weddingDate: pickFirstNonEmpty(sfProfile.lifecycle?.weddingDate, localProfile.lifecycle?.weddingDate, sfProfile.weddingDate),
-        lifecycleStatus: pickFirstNonEmpty(sfProfile.lifecycle?.lifecycleStatus, localProfile.lifecycle?.lifecycleStatus, sfProfile.lifecycleStatus),
+        hebrewName: pickFirstNonEmpty(sfProfile.lifecycle?.hebrewName, sfProfile.hebrewName),
+        fathersHebrewName: pickFirstNonEmpty(sfProfile.lifecycle?.fathersHebrewName, sfProfile.fathersHebrewName),
+        mothersHebrewName: pickFirstNonEmpty(sfProfile.lifecycle?.mothersHebrewName, sfProfile.mothersHebrewName),
+        jewish: pickFirstNonEmpty(sfProfile.lifecycle?.jewish, sfProfile.jewish),
+        hebrewBirthdate: pickFirstNonEmpty(sfProfile.lifecycle?.hebrewBirthdate, sfProfile.hebrewBirthdate),
+        nextHebrewBirthday: pickFirstNonEmpty(sfProfile.lifecycle?.nextHebrewBirthday, sfProfile.nextHebrewBirthday),
+        weddingDate: pickFirstNonEmpty(sfProfile.lifecycle?.weddingDate, sfProfile.weddingDate),
+        lifecycleStatus: pickFirstNonEmpty(sfProfile.lifecycle?.lifecycleStatus, sfProfile.lifecycleStatus),
       },
       additional: {
-        birthdate: pickFirstNonEmpty(sfProfile.additional?.birthdate, localProfile.additional?.birthdate, sfProfile.birthdate),
-        age: pickFirstNonEmpty(sfProfile.additional?.age, localProfile.additional?.age, sfProfile.age),
-        gender: pickFirstNonEmpty(sfProfile.additional?.gender, localProfile.additional?.gender, sfProfile.gender),
+        birthdate: pickFirstNonEmpty(sfProfile.additional?.birthdate, sfProfile.birthdate),
+        age: pickFirstNonEmpty(sfProfile.additional?.age, sfProfile.age),
+        gender: pickFirstNonEmpty(sfProfile.additional?.gender, sfProfile.gender),
       },
-      householdDonationTotal: localProfile.householdDonationTotal || sfProfile.householdDonationTotal || '$0.00',
-      spiritual: localProfile.spiritual || sfProfile.spiritual,
+      householdDonationTotal: financials.totalPayments ? formatMoney(financials.totalPayments) : '$0.00',
     },
     contacts: effectivePortal.contacts || [],
     relationships: effectivePortal.relationships || [],
-    financials: buildFinancialsFromSources(localMember?.financials, effectivePortal),
+    financials,
     membership: deriveMembershipSummary(
       effectivePortal.membership,
-      buildFinancialsFromSources(localMember?.financials, effectivePortal),
+      financials,
       {
-        lifecycleStatus: pickFirstNonEmpty(
-          sfProfile.lifecycle?.lifecycleStatus,
-          localProfile.lifecycle?.lifecycleStatus,
-        ),
-        householdDonationTotal: localProfile.householdDonationTotal || sfProfile.householdDonationTotal,
+        lifecycleStatus: pickFirstNonEmpty(sfProfile.lifecycle?.lifecycleStatus, sfProfile.lifecycleStatus),
+        householdDonationTotal: financials.totalPayments ? formatMoney(financials.totalPayments) : '$0.00',
       },
     ),
+    syncedFromSalesforce: Boolean(effectivePortal.fromSalesforce),
   };
 }
 
@@ -581,7 +604,6 @@ async function buildPortalSfData(email) {
   }
 
   const memberDetails = lookup.memberDetails;
-  const localMember = await db.getMemberByEmail(email);
   const portalData = await lookupSalesforcePortalData(email, memberDetails.contactId, memberDetails);
   const financialsData = await lookupSalesforcePayments(email, memberDetails.contactId, memberDetails);
 
@@ -590,10 +612,16 @@ async function buildPortalSfData(email) {
     payments: financialsData.payments?.length ? financialsData.payments : (portalData.payments || []),
     pledges: financialsData.pledges?.length ? financialsData.pledges : (portalData.pledges || []),
     recurring: financialsData.recurring?.length ? financialsData.recurring : (portalData.recurring || []),
-    fromSalesforce: portalData.fromSalesforce || financialsData.fromSalesforce,
+    fromSalesforce: Boolean(
+      portalData.fromSalesforce
+      || financialsData.fromSalesforce
+      || financialsData.payments?.length
+      || financialsData.pledges?.length
+      || financialsData.recurring?.length
+    ),
   };
 
-  const sfData = mergeMemberProfile(memberDetails, localMember, mergedPortal);
+  const sfData = mergeMemberProfile(memberDetails, mergedPortal);
 
   userSalesforceData[email] = sfData;
   return { sfData, memberDetails, portalData: mergedPortal };
@@ -797,8 +825,12 @@ app.post('/api/auth/check-member', async (req, res) => {
   authLog('CHECK_MEMBER_OK', {
     email: emailLower,
     clerkUserId: clerkUser?.id || null,
+    contactId: lookup.memberDetails.contactId || null,
+    accountId: lookup.memberDetails.accountId || null,
     nextStep: 'frontend sends Clerk magic link',
   });
+
+  cacheMemberLookup(emailLower, lookup.memberDetails);
 
   res.json({ allowed: true, member: lookup.memberDetails });
 });
@@ -836,18 +868,19 @@ app.get('/api/portal/dashboard', async (req, res) => {
 
     const { sfData } = result;
 
-    // Fetch portal metrics and items
-    const dashboardData = await db.getDashboardData();
     authLog('DASHBOARD_OK', {
       email,
       clerkUserId: userId,
       name: sfData?.name,
       contactId: sfData?.contactId,
+      accountId: sfData?.accountId,
       contacts: sfData?.contacts?.length || 0,
       payments: sfData?.financials?.payments?.length || 0,
-      city: sfData?.profile?.city || null,
-      mobile: sfData?.profile?.mobile || null,
+      pledges: sfData?.financials?.pledges?.length || 0,
+      recurring: sfData?.financials?.recurring?.length || 0,
+      fromSalesforce: sfData?.syncedFromSalesforce,
     });
+    // Portal data is always loaded live from Salesforce via Make.com — no local db.json cache.
     res.json({
       success: true,
       user: {
@@ -857,7 +890,9 @@ app.get('/api/portal/dashboard', async (req, res) => {
         name: sfData?.name || 'Chabad Bedford Member',
       },
       sfData,
-      ...dashboardData,
+      stats: null,
+      members: [],
+      events: [],
     });
   } catch (error) {
     authLog('DASHBOARD_AUTH_FAIL', { error: error.message });
@@ -891,28 +926,95 @@ app.post('/api/portal/refresh', async (req, res) => {
 
 // Stripe Checkout Session generation
 async function resolveCheckoutContactId(authHeader, email, contactId = '') {
-  let resolvedContactId = contactId || '';
+  let resolvedContactId = sanitizeContactId(contactId);
   if (authHeader?.startsWith('Bearer ') && !resolvedContactId) {
     try {
       const token = authHeader.split(' ')[1];
       const decoded = await verifyClerkSessionToken(token);
       const clerkUser = await clerkClient.users.getUser(decoded.sub);
       const clerkEmail = clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase();
-      resolvedContactId = userSalesforceData[clerkEmail]?.contactId || '';
+      const cached = userSalesforceData[clerkEmail]?.contactId || '';
+      if (cached.startsWith('003')) resolvedContactId = cached;
     } catch {
       // Non-blocking
     }
   }
   if (!resolvedContactId && email) {
-    resolvedContactId = userSalesforceData[email.toLowerCase()]?.contactId || '';
+    const cached = userSalesforceData[email.toLowerCase()]?.contactId || '';
+    if (cached.startsWith('003')) resolvedContactId = cached;
+  }
+  if (!resolvedContactId && email) {
+    const lookup = await lookupSalesforceMember(email.toLowerCase());
+    if (lookup.found && lookup.memberDetails?.contactId?.startsWith('003')) {
+      resolvedContactId = lookup.memberDetails.contactId;
+      userSalesforceData[email.toLowerCase()] = {
+        ...(userSalesforceData[email.toLowerCase()] || {}),
+        contactId: resolvedContactId,
+        accountId: lookup.memberDetails.accountId || userSalesforceData[email.toLowerCase()]?.accountId || '',
+      };
+    }
   }
   return resolvedContactId;
 }
 
+function cacheMemberLookup(email, memberDetails = {}) {
+  const emailLower = (email || memberDetails.email || '').toLowerCase();
+  if (!emailLower) return;
+
+  userSalesforceData[emailLower] = {
+    ...(userSalesforceData[emailLower] || {}),
+    contactId: memberDetails.contactId?.startsWith('003') ? memberDetails.contactId : (userSalesforceData[emailLower]?.contactId || ''),
+    accountId: memberDetails.accountId?.startsWith('001') ? memberDetails.accountId : (userSalesforceData[emailLower]?.accountId || ''),
+    name: memberDetails.name || userSalesforceData[emailLower]?.name || '',
+    email: emailLower,
+  };
+}
+
+async function resolveMemberIds(authHeader, email, { contactId = '', accountId = '' } = {}) {
+  const emailLower = (email || '').toLowerCase();
+  let resolvedContactId = sanitizeContactId(contactId);
+  let resolvedAccountId = sanitizeAccountId(accountId);
+
+  if (!resolvedContactId) {
+    resolvedContactId = await resolveCheckoutContactId(authHeader, emailLower, '');
+  }
+  if (!resolvedAccountId) {
+    resolvedAccountId = await resolveCheckoutAccountId(authHeader, emailLower, '');
+  }
+
+  if (emailLower && (!resolvedAccountId || !resolvedContactId)) {
+    const lookup = await lookupSalesforceMember(emailLower);
+    if (lookup.found) {
+      cacheMemberLookup(emailLower, lookup.memberDetails);
+      if (!resolvedContactId) {
+        resolvedContactId = sanitizeContactId(lookup.memberDetails.contactId);
+      }
+      if (!resolvedAccountId) {
+        resolvedAccountId = sanitizeAccountId(lookup.memberDetails.accountId);
+      }
+    }
+  }
+
+  return { contactId: resolvedContactId, accountId: resolvedAccountId };
+}
+
+async function ensureFinancialPayloadIds(payload, authHeader) {
+  const email = (payload.email || '').toLowerCase();
+  const ids = await resolveMemberIds(authHeader, email, {
+    contactId: payload.contactId || '',
+    accountId: payload.accountId || '',
+  });
+  payload.contactId = ids.contactId;
+  payload.accountId = ids.accountId;
+  return payload;
+}
+
 function pickCachedAccountId(email, accountId = '') {
-  if (accountId) return accountId;
+  const normalized = (accountId || '').trim();
+  if (normalized.startsWith('001')) return normalized;
   if (email) {
-    return userSalesforceData[email.toLowerCase()]?.accountId || '';
+    const cached = userSalesforceData[email.toLowerCase()]?.accountId || '';
+    return cached.startsWith('001') ? cached : '';
   }
   return '';
 }
@@ -920,6 +1022,193 @@ function pickCachedAccountId(email, accountId = '') {
 function toSalesforceDateIso(dateStr = '') {
   const dateOnly = (dateStr || new Date().toISOString().split('T')[0]).slice(0, 10);
   return `${dateOnly}T04:00:00.000Z`;
+}
+
+function stripeRecurringInterval(frequency = 'Monthly') {
+  const map = {
+    Monthly: 'month',
+    Quarterly: 'month',
+    Yearly: 'year',
+    Annual: 'year',
+  };
+  return map[frequency] || 'month';
+}
+
+function stripeRecurringIntervalCount(frequency = 'Monthly') {
+  if (frequency === 'Quarterly') return 3;
+  return 1;
+}
+
+function addRecurringIntervalToDate(dateStr = '', frequency = 'Monthly') {
+  const base = (dateStr || new Date().toISOString().split('T')[0]).slice(0, 10);
+  const date = new Date(`${base}T12:00:00`);
+  if (frequency === 'Quarterly') {
+    date.setMonth(date.getMonth() + 3);
+  } else if (frequency === 'Yearly' || frequency === 'Annual') {
+    date.setFullYear(date.getFullYear() + 1);
+  } else {
+    date.setMonth(date.getMonth() + 1);
+  }
+  return date.toISOString().split('T')[0];
+}
+
+function enrichFinancialPayload(payload = {}) {
+  const pledgeAmount = parseFloat(payload.pledgeAmount) || 0;
+  const paymentAmount = parseFloat(payload.paymentAmount) || 0;
+  const isRecurring = payload.billingMode === 'recurring' || payload.isRecurring === 'true';
+  const recurringAmount = isRecurring ? (paymentAmount || pledgeAmount) : 0;
+  const frequency = payload.frequency || 'Monthly';
+  const paymentDate = payload.paymentDate || new Date().toISOString().split('T')[0];
+  const stripePaid = payload.stripePaymentStatus === 'paid'
+    || Boolean(payload.stripeSubscriptionId);
+
+  let action = 'none';
+  if (isRecurring && recurringAmount > 0) action = 'recurring';
+  else if (pledgeAmount > 0 && paymentAmount > 0) action = 'pledge_and_payment';
+  else if (pledgeAmount > 0) action = 'pledge';
+  else if (paymentAmount > 0) action = 'payment';
+
+  const recurringFields = isRecurring && recurringAmount > 0 ? {
+    chargeStartDate: paymentDate,
+    nextChargeDate: addRecurringIntervalToDate(paymentDate, frequency),
+    initialRecurrences: stripePaid ? 1 : 0,
+    totalEstimatedRevenue: recurringAmount,
+    chargesRemaining: 0,
+    paymentProcessorId: payload.stripeSubscriptionId || payload.stripePaymentIntentId || '',
+    recurringInvoiceName: process.env.RECURRING_INVOICE_NAME || '',
+    recurringLetterheadName: process.env.RECURRING_LETTERHEAD_NAME || '',
+  } : {};
+
+  return {
+    ...payload,
+    ...recurringFields,
+    action,
+    pledgeAmount: pledgeAmount > 0 ? pledgeAmount : 0,
+    createPledge: pledgeAmount > 0 && !isRecurring,
+    createPayment: paymentAmount > 0 && !isRecurring,
+    createRecurring: isRecurring && recurringAmount > 0,
+    paymentOnly: pledgeAmount <= 0 && paymentAmount > 0 && !isRecurring,
+    recurringAmount,
+    frequency,
+    paymentDateIso: payload.paymentDateIso || toSalesforceDateIso(paymentDate),
+    isRecurring: isRecurring ? 'true' : 'false',
+  };
+}
+
+function buildStripeCheckoutMetadata(payload, contactId, email) {
+  const pledgeAmount = parseFloat(payload.pledgeAmount) || 0;
+  const paymentAmount = parseFloat(payload.paymentAmount) || 0;
+  const isRecurring = payload.billingMode === 'recurring';
+  const enriched = enrichFinancialPayload(payload);
+
+  return {
+    email: (email || payload.email || '').toLowerCase(),
+    contactId: sanitizeContactId(contactId || payload.contactId || ''),
+    accountId: sanitizeAccountId(payload.accountId || ''),
+    purpose: payload.purpose || 'portal_payment',
+    paymentType: payload.paymentType || 'Donation',
+    subType: payload.subType || 'General',
+    memo: payload.memo || '',
+    source: payload.source || 'member_portal',
+    billingMode: payload.billingMode || 'regular',
+    frequency: payload.frequency || 'Monthly',
+    paymentDate: payload.paymentDate || new Date().toISOString().split('T')[0],
+    paymentDateIso: toSalesforceDateIso(payload.paymentDate),
+    donorId: payload.accountId || '',
+    pledgeAmount: String(pledgeAmount > 0 ? pledgeAmount : 0),
+    paymentAmount: String(paymentAmount),
+    action: enriched.action,
+    createPledge: enriched.createPledge ? 'true' : 'false',
+    createPayment: enriched.createPayment ? 'true' : 'false',
+    createRecurring: enriched.createRecurring ? 'true' : 'false',
+    paymentOnly: enriched.paymentOnly ? 'true' : 'false',
+    isRecurring: isRecurring ? 'true' : 'false',
+  };
+}
+
+function buildQuickPaymentPayload(body, contactId) {
+  const pledgeAmount = parseFloat(body.pledgeAmount) || 0;
+  const paymentAmount = parseFloat(body.paymentAmount) || 0;
+  const billingMode = body.billingMode === 'recurring' ? 'recurring' : 'regular';
+  return enrichFinancialPayload({
+    email: (body.email || '').toLowerCase(),
+    contactId,
+    accountId: body.accountId || '',
+    purpose: body.purpose || 'portal_payment',
+    paymentType: body.paymentType || 'Donation',
+    subType: body.subType || 'General',
+    memo: body.memo || '',
+    pledgeAmount,
+    paymentAmount,
+    billingMode,
+    frequency: body.frequency || 'Monthly',
+    paymentDate: body.paymentDate || new Date().toISOString().split('T')[0],
+    source: 'member_portal',
+  });
+}
+
+async function createStripeCheckoutSession(payload, contactId, email) {
+  const paymentAmount = parseFloat(payload.paymentAmount) || 0;
+  const isRecurring = payload.billingMode === 'recurring';
+  const checkoutLabel = [payload.paymentType, payload.subType].filter(Boolean).join(' — ');
+  const metadata = buildStripeCheckoutMetadata(payload, contactId, email);
+
+  if (isRecurring && paymentAmount > 0) {
+    return stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      customer_email: email,
+      mode: 'subscription',
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: checkoutLabel || payload.purpose || 'Recurring Contribution',
+            description: payload.memo || `Recurring ${payload.frequency}: ${payload.paymentType}`,
+          },
+          unit_amount: Math.round(paymentAmount * 100),
+          recurring: {
+            interval: stripeRecurringInterval(payload.frequency),
+            interval_count: stripeRecurringIntervalCount(payload.frequency),
+          },
+        },
+        quantity: 1,
+      }],
+      client_reference_id: buildCheckoutClientReferenceId({ ...payload, contactId }),
+      metadata,
+      subscription_data: { metadata },
+      success_url: CHECKOUT_SUCCESS_URL,
+      cancel_url: CHECKOUT_CANCEL_URL,
+    });
+  }
+
+  return stripe.checkout.sessions.create({
+    payment_method_types: ['card'],
+    customer_email: email,
+    mode: 'payment',
+    line_items: [{
+      price_data: {
+        currency: 'usd',
+        product_data: {
+          name: checkoutLabel || payload.purpose,
+          description: payload.memo || `Portal: ${payload.paymentType} / ${payload.subType}`,
+        },
+        unit_amount: Math.round(paymentAmount * 100),
+      },
+      quantity: 1,
+    }],
+    client_reference_id: buildCheckoutClientReferenceId({ ...payload, contactId }),
+    metadata,
+    success_url: CHECKOUT_SUCCESS_URL,
+    cancel_url: CHECKOUT_CANCEL_URL,
+  });
+}
+
+function isCheckoutSessionComplete(session) {
+  if (!session) return false;
+  if (session.mode === 'subscription') {
+    return session.status === 'complete';
+  }
+  return session.payment_status === 'paid';
 }
 
 function buildCheckoutClientReferenceId(payload) {
@@ -955,85 +1244,37 @@ async function resolveCheckoutAccountId(authHeader, email, accountId = '') {
       const clerkUser = await clerkClient.users.getUser(decoded.sub);
       const clerkEmail = clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase();
       resolvedAccountId = userSalesforceData[clerkEmail]?.accountId || '';
-      if (resolvedAccountId) return resolvedAccountId;
+      if (resolvedAccountId.startsWith('001')) return resolvedAccountId;
     } catch {
       // Non-blocking
     }
   }
 
   if (email) {
+    const emailLower = email.toLowerCase();
+    const lookup = await lookupSalesforceMember(emailLower);
+    if (lookup.found) {
+      cacheMemberLookup(emailLower, lookup.memberDetails);
+      if (lookup.memberDetails.accountId?.startsWith('001')) {
+        return lookup.memberDetails.accountId;
+      }
+    }
+
     try {
-      const result = await buildPortalSfData(email);
-      resolvedAccountId = result.sfData?.accountId || result.sfData?.account?.id || '';
-      if (resolvedAccountId) return resolvedAccountId;
+      const contactId = await resolveCheckoutContactId(authHeader, emailLower, '');
+      if (contactId) {
+        const portalData = await lookupSalesforcePortalData(emailLower, contactId);
+        if (portalData.accountId?.startsWith('001')) {
+          cacheMemberLookup(emailLower, { ...(lookup.memberDetails || {}), accountId: portalData.accountId, contactId });
+          return portalData.accountId;
+        }
+      }
     } catch {
       // Non-blocking
     }
   }
 
   return '';
-}
-
-function buildQuickPaymentPayload(body, contactId) {
-  const pledgeAmount = parseFloat(body.pledgeAmount) || 0;
-  const paymentAmount = parseFloat(body.paymentAmount) || 0;
-  const billingMode = body.billingMode === 'recurring' ? 'recurring' : 'regular';
-  return {
-    email: (body.email || '').toLowerCase(),
-    contactId,
-    accountId: body.accountId || '',
-    purpose: body.purpose || 'portal_payment',
-    paymentType: body.paymentType || 'Donation',
-    subType: body.subType || 'General',
-    memo: body.memo || '',
-    pledgeAmount,
-    paymentAmount,
-    billingMode,
-    isRecurring: billingMode === 'recurring' ? 'true' : 'false',
-    paymentDate: body.paymentDate || new Date().toISOString().split('T')[0],
-    source: 'member_portal',
-  };
-}
-
-async function triggerQuickPaymentWebhook(payload) {
-  const webhookUrl = process.env.MAKE_QUICK_PAYMENT_WEBHOOK_URL
-    || process.env.MAKE_STRIPE_PAYMENT_WEBHOOK_URL;
-  if (!webhookUrl) {
-    throw new Error('MAKE_QUICK_PAYMENT_WEBHOOK_URL or MAKE_STRIPE_PAYMENT_WEBHOOK_URL is not configured.');
-  }
-
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Make.com quick payment webhook returned ${response.status}`);
-  }
-
-  return response.text();
-}
-
-async function triggerStripePaymentWebhook(payload) {
-  const webhookUrl = process.env.MAKE_STRIPE_PAYMENT_WEBHOOK_URL;
-  if (!webhookUrl) {
-    console.log('[PAYMENT] MAKE_STRIPE_PAYMENT_WEBHOOK_URL not set — skipping portal webhook (Stripe Dashboard webhook handles sync).');
-    return null;
-  }
-
-  const response = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Make.com Stripe payment webhook returned ${response.status}`);
-  }
-
-  console.log(`[PAYMENT] Make webhook sent: accountId=${payload.accountId || '(missing)'}, contactId=${payload.contactId || '(missing)'}, amount=${payload.paymentAmount}`);
-  return response.text();
 }
 
 function buildPayloadFromCheckoutSession(session) {
@@ -1046,10 +1287,10 @@ function buildPayloadFromCheckoutSession(session) {
   const pledgeAmount = parseFloat(metadata.pledgeAmount) || 0;
   const billingMode = metadata.billingMode === 'recurring' ? 'recurring' : 'regular';
 
-  return {
+  return enrichFinancialPayload({
     email,
-    contactId: metadata.contactId || refData.contactId || '',
-    accountId: metadata.accountId || refData.accountId || '',
+    contactId: sanitizeContactId(metadata.contactId || refData.contactId || ''),
+    accountId: sanitizeAccountId(metadata.accountId || refData.accountId || ''),
     purpose: metadata.purpose || 'portal_payment',
     paymentType: metadata.paymentType || refData.paymentType || 'Donation',
     subType: metadata.subType || 'General',
@@ -1057,16 +1298,92 @@ function buildPayloadFromCheckoutSession(session) {
     pledgeAmount,
     paymentAmount,
     billingMode,
-    isRecurring: metadata.isRecurring === 'true' || billingMode === 'recurring' ? 'true' : 'false',
+    frequency: metadata.frequency || 'Monthly',
     paymentDate: metadata.paymentDate || refData.paymentDate || new Date().toISOString().split('T')[0],
-    paymentDateIso: toSalesforceDateIso(metadata.paymentDate || refData.paymentDate || ''),
     source: metadata.source || 'member_portal',
     stripeSessionId: session.id,
     stripePaymentStatus: session.payment_status,
+    stripeCheckoutMode: session.mode || 'payment',
+    stripeSubscriptionId: typeof session.subscription === 'string'
+      ? session.subscription
+      : session.subscription?.id || '',
     stripePaymentIntentId: typeof session.payment_intent === 'string'
       ? session.payment_intent
       : session.payment_intent?.id || '',
+  });
+}
+
+async function postToMakeWebhook(webhookUrl, payload, label) {
+  if (!webhookUrl) {
+    throw new Error(`${label} is not configured in backend/.env`);
+  }
+
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Make.com ${label} returned ${response.status}`);
+  }
+
+  return response.text();
+}
+
+async function triggerFinancialWebhook(payload, authHeader = null) {
+  await ensureFinancialPayloadIds(payload, authHeader);
+  const enriched = enrichFinancialPayload(payload);
+
+  if (!enriched.contactId?.startsWith('003')) {
+    throw new Error('Salesforce Contact ID is missing or invalid. Cannot sync to ChabadOne CRM.');
+  }
+  if (!enriched.accountId?.startsWith('001')) {
+    throw new Error('Salesforce Household Account ID is missing. Cannot sync payment to ChabadOne CRM.');
+  }
+
+  const paymentUrl = process.env.MAKE_STRIPE_PAYMENT_WEBHOOK_URL;
+  const pledgeRecurringUrl = process.env.MAKE_QUICK_PAYMENT_WEBHOOK_URL;
+
+  const webhookPayload = {
+    ...enriched,
+    pledgeAmount: enriched.createPledge ? enriched.pledgeAmount : 0,
+    createPledge: Boolean(enriched.createPledge),
+    paymentOnly: Boolean(enriched.paymentOnly),
+    // Explicit aliases for Make.com field mapping (Charge Paid must NOT be 0 on payment-only).
+    chargePaidAmount: enriched.createPayment ? enriched.paymentAmount : 0,
+    lineItemAmount: enriched.createPayment ? -Math.abs(enriched.paymentAmount) : 0,
+    doNotCreatePledge: !enriched.createPledge,
   };
+
+  const calls = [];
+  if (enriched.createPayment && paymentUrl) {
+    calls.push(postToMakeWebhook(paymentUrl, webhookPayload, 'MAKE_STRIPE_PAYMENT_WEBHOOK_URL'));
+  }
+  if ((enriched.createPledge || enriched.createRecurring) && pledgeRecurringUrl) {
+    calls.push(postToMakeWebhook(pledgeRecurringUrl, webhookPayload, 'MAKE_QUICK_PAYMENT_WEBHOOK_URL'));
+  }
+
+  if (!calls.length) {
+    const fallbackUrl = paymentUrl || pledgeRecurringUrl;
+    if (!fallbackUrl) {
+      throw new Error('Configure MAKE_STRIPE_PAYMENT_WEBHOOK_URL and/or MAKE_QUICK_PAYMENT_WEBHOOK_URL in backend/.env');
+    }
+    await postToMakeWebhook(fallbackUrl, webhookPayload, 'financial webhook');
+  } else {
+    await Promise.all(calls);
+  }
+
+  console.log(`[FINANCIAL] action=${enriched.action}, contactId=${webhookPayload.contactId}, accountId=${webhookPayload.accountId}, pledge=${webhookPayload.pledgeAmount}, payment=${enriched.paymentAmount}, recurring=${enriched.recurringAmount}, paymentOnly=${webhookPayload.paymentOnly}, paymentWebhook=${Boolean(enriched.createPayment && paymentUrl)}, pledgeRecurringWebhook=${Boolean((enriched.createPledge || enriched.createRecurring) && pledgeRecurringUrl)}`);
+  return enriched;
+}
+
+async function triggerQuickPaymentWebhook(payload) {
+  return triggerFinancialWebhook(payload);
+}
+
+async function triggerStripePaymentWebhook(payload) {
+  return triggerFinancialWebhook(payload);
 }
 
 app.post('/api/payments/quick-payment', async (req, res) => {
@@ -1088,14 +1405,24 @@ app.post('/api/payments/quick-payment', async (req, res) => {
   const accountId = await resolveCheckoutAccountId(authHeader, email, body.accountId || '');
   const payload = buildQuickPaymentPayload({ ...body, accountId }, contactId);
 
-  // Pledge-only or recurring setup without immediate Stripe charge
+  if (!payload.accountId?.startsWith('001') || !payload.contactId?.startsWith('003')) {
+    return res.status(400).json({
+      error: 'Missing Salesforce IDs for this member. Log out, log in again, then retry.',
+    });
+  }
+
+  if (billingMode === 'recurring' && pledgeAmount <= 0 && paymentAmount <= 0) {
+    return res.status(400).json({ error: 'Enter an amount for the recurring billing plan.' });
+  }
+
+  // Pledge-only or recurring CRM setup without immediate Stripe charge
   if (paymentAmount <= 0) {
     try {
-      await triggerQuickPaymentWebhook(payload);
+      await triggerFinancialWebhook(payload, authHeader);
       const message = billingMode === 'recurring'
-        ? 'Recurring billing profile created in ChabadOne CRM.'
+        ? 'Recurring billing plan saved to ChabadOne CRM.'
         : 'Pledge saved to ChabadOne CRM.';
-      return res.json({ success: true, message });
+      return res.json({ success: true, message, action: payload.action });
     } catch (error) {
       console.error('Quick payment webhook error:', error);
       return res.status(500).json({ error: error.message });
@@ -1107,36 +1434,10 @@ app.post('/api/payments/quick-payment', async (req, res) => {
   }
 
   try {
-    const checkoutLabel = [payload.paymentType, payload.subType].filter(Boolean).join(' — ');
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      customer_email: email,
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          product_data: {
-            name: checkoutLabel || payload.purpose,
-            description: payload.memo || `Portal: ${payload.paymentType} / ${payload.subType}`,
-          },
-          unit_amount: Math.round(paymentAmount * 100),
-        },
-        quantity: 1,
-      }],
-      mode: 'payment',
-      client_reference_id: buildCheckoutClientReferenceId({ ...payload, contactId }),
-      metadata: {
-        ...payload,
-        donorId: payload.accountId || '',
-        paymentDateIso: toSalesforceDateIso(payload.paymentDate),
-        pledgeAmount: String(pledgeAmount),
-        paymentAmount: String(paymentAmount),
-      },
-      success_url: CHECKOUT_SUCCESS_URL,
-      cancel_url: CHECKOUT_CANCEL_URL,
-    });
+    const session = await createStripeCheckoutSession(payload, contactId, email);
 
-    console.log(`[PAYMENT] checkout session ${session.id} metadata: accountId=${payload.accountId || '(missing)'}, contactId=${contactId || '(missing)'}, email=${email}`);
-    res.json({ url: session.url });
+    console.log(`[PAYMENT] checkout session ${session.id} mode=${session.mode}, accountId=${payload.accountId || '(missing)'}, contactId=${contactId || '(missing)'}, email=${email}`);
+    res.json({ url: session.url, mode: session.mode });
   } catch (error) {
     console.error('Error creating Stripe Checkout Session:', error);
     res.status(500).json({ error: error.message });
@@ -1175,7 +1476,7 @@ app.post('/api/payments/confirm-checkout', async (req, res) => {
     }
 
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.payment_status !== 'paid') {
+    if (!isCheckoutSessionComplete(session)) {
       return res.status(400).json({ error: 'Payment is not completed yet.' });
     }
 
@@ -1186,15 +1487,18 @@ app.post('/api/payments/confirm-checkout', async (req, res) => {
     if (!payload.email) {
       payload.email = userEmail;
     }
-    if (!payload.accountId) {
-      payload.accountId = await resolveCheckoutAccountId(authHeader, payload.email, '');
+    if (!payload.accountId?.startsWith('001')) {
+      payload.accountId = await resolveCheckoutAccountId(authHeader, payload.email, payload.accountId || '');
     }
-    if (!payload.contactId) {
+    if (!payload.contactId?.startsWith('003')) {
       payload.contactId = await resolveCheckoutContactId(authHeader, payload.email, '');
     }
 
     if (processedCheckoutSessions.has(sessionId)) {
       return res.json({ success: true, alreadyProcessed: true, message: 'Payment already synced to ChabadOne CRM.' });
+    }
+    if (processingCheckoutSessions.has(sessionId)) {
+      return res.json({ success: true, alreadyProcessed: true, message: 'Payment sync already in progress.' });
     }
 
     if (!process.env.MAKE_STRIPE_PAYMENT_WEBHOOK_URL) {
@@ -1203,12 +1507,23 @@ app.post('/api/payments/confirm-checkout', async (req, res) => {
       });
     }
 
-    await triggerStripePaymentWebhook(payload);
-    processedCheckoutSessions.add(sessionId);
+    processingCheckoutSessions.add(sessionId);
+    try {
+      await triggerFinancialWebhook(payload, authHeader);
+      processedCheckoutSessions.add(sessionId);
+    } finally {
+      processingCheckoutSessions.delete(sessionId);
+    }
 
-    const message = 'Payment synced to ChabadOne CRM.';
-    console.log(`[PAYMENT] confirm-checkout OK for ${payload.email}, amount: ${payload.paymentAmount}, accountId: ${payload.accountId || '(missing)'}`);
-    res.json({ success: true, message });
+    const message = payload.createRecurring
+      ? 'Recurring billing synced to ChabadOne CRM.'
+      : payload.createPledge && payload.createPayment
+        ? 'Pledge and payment synced to ChabadOne CRM.'
+        : payload.createPledge
+          ? 'Pledge synced to ChabadOne CRM.'
+          : 'Payment synced to ChabadOne CRM.';
+    console.log(`[PAYMENT] confirm-checkout OK for ${payload.email}, action=${payload.action}, accountId=${payload.accountId || '(missing)'}`);
+    res.json({ success: true, message, action: payload.action });
   } catch (error) {
     console.error('Error confirming Stripe checkout:', error);
     res.status(500).json({ error: error.message });
@@ -1285,8 +1600,7 @@ app.post('/api/payments/verify', async (req, res) => {
 
   try {
     console.log(`Verified payment from Make.com for email: ${email}, amount: ${amount}`);
-    const updatedMember = await db.recordPayment(email, parseFloat(amount), type, method);
-    res.json({ success: true, member: updatedMember });
+    res.json({ success: true, message: 'Payment verified. Refresh the portal to load Salesforce records.' });
   } catch (error) {
     console.error('Error recording payment in backend:', error);
     res.status(500).json({ error: error.message });
@@ -1328,36 +1642,13 @@ app.post('/api/portal/update-profile', async (req, res) => {
 
     console.log(`Updating profile for: ${email}`);
 
-    // Retrieve existing member to get contactId
-    const existingMember = await db.getMemberByEmail(email);
-    let contactId = existingMember?.contactId || userSalesforceData[email]?.contactId || '';
-
-    // If contactId is empty, try to query Make.com search webhook to fetch it dynamically
-    if (!contactId && process.env.MAKE_WEBHOOK_URL) {
-      console.log(`Contact ID missing for ${email}. Fetching dynamically from Make.com...`);
-      try {
-        const makeResponse = await fetch(process.env.MAKE_WEBHOOK_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email }),
-        });
-
-        if (makeResponse.ok) {
-          const makeText = await makeResponse.text();
-          const foundMatch = makeText.match(/"found":\s*(true|false)/i);
-          if (foundMatch && foundMatch[1] === 'true') {
-            const contactIdMatch = makeText.match(/"contactId":\s*([^\r\n,]+)/);
-            if (contactIdMatch) {
-              contactId = contactIdMatch[1].replace(/['"]/g, '').trim();
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching contactId dynamically:', err);
-      }
+    const lookup = await lookupSalesforceMember(email);
+    if (!lookup.found) {
+      return res.status(403).json({ error: 'unauthorized_member', message: 'You are not authorised to login to the member portal.' });
     }
+
+    let contactId = lookup.memberDetails.contactId || userSalesforceData[email]?.contactId || '';
+    const accountId = lookup.memberDetails.accountId || userSalesforceData[email]?.accountId || '';
 
     // Call Make.com Profile Update Webhook if configured
     if (process.env.MAKE_PROFILE_UPDATE_WEBHOOK_URL) {
@@ -1370,6 +1661,7 @@ app.post('/api/portal/update-profile', async (req, res) => {
           },
           body: JSON.stringify({
             contactId,
+            accountId,
             email,
             firstName,
             lastName,
@@ -1410,87 +1702,26 @@ app.post('/api/portal/update-profile', async (req, res) => {
       console.warn('MAKE_PROFILE_UPDATE_WEBHOOK_URL is not configured in environment variables.');
     }
 
-    // Save changes in local database
-    const updatedMember = await db.updateMemberProfile(email, {
-      firstName,
-      lastName,
-      phone,
-      homePhone,
-      street,
-      city,
-      state,
-      postalCode,
-      country,
-      nickname,
-      title,
-      hebrewName,
-      fathersHebrewName,
-      mothersHebrewName,
-      jewish,
-      hebrewBirthdate,
-      nextHebrewBirthday,
-      weddingDate,
-      lifecycleStatus,
-      birthdate,
-      age,
-      gender,
-    }, contactId);
+    const refreshed = await buildPortalSfData(email);
+    if (refreshed.error) {
+      return res.status(503).json({ error: 'Unable to refresh profile from Salesforce.' });
+    }
 
-    const lifecycle = {
-      hebrewName,
-      fathersHebrewName,
-      mothersHebrewName,
-      jewish,
-      hebrewBirthdate,
-      nextHebrewBirthday,
-      weddingDate,
-      lifecycleStatus,
-    };
-
-    const additional = { birthdate, age, gender };
-
-    const sfData = mergeMemberProfile(
-      {
-        contactId,
-        firstName,
-        lastName,
-        name: `${firstName || ''} ${lastName || ''}`.trim(),
-        email,
-        role: updatedMember.role || 'Member',
-        ...lifecycle,
-        ...additional,
-        profile: {
-          phone,
-          mobile: phone,
-          homePhone,
-          street,
-          city,
-          state,
-          postalCode,
-          country,
-          nickname,
-          title,
-          lifecycle,
-          ...lifecycle,
-          additional,
-          ...additional,
-        },
-      },
-      updatedMember,
-    );
-
-    // Update cached user data
-    userSalesforceData[email] = sfData;
+    userSalesforceData[email] = refreshed.sfData;
 
     res.json({
       success: true,
       message: 'Profile updated successfully.',
-      sfData,
+      sfData: refreshed.sfData,
     });
   } catch (error) {
     console.error('Profile update authorization or save error:', error);
     res.status(401).json({ error: 'Session expired or invalid. Please log in again.' });
   }
+});
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, service: 'chabad-portal-api' });
 });
 
 app.listen(PORT, () => {

@@ -41,3 +41,9 @@ export const PAYMENT_SUBTYPES = [
   'Gan Scholarship',
   'Wedding',
 ];
+
+export const RECURRING_FREQUENCIES = [
+  'Monthly',
+  'Quarterly',
+  'Yearly',
+];

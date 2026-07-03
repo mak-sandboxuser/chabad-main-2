@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, useClerk } from '@clerk/clerk-react';
 import { useSignInSignal } from '@clerk/clerk-react/experimental';
-import { Mail, ArrowRight, ShieldAlert, Shield, CheckCircle, HelpCircle, Moon, Sun, Lock, Users, CreditCard, Headphones } from 'lucide-react';
+import { Mail, ArrowRight, ShieldAlert, Shield, CheckCircle, HelpCircle, Moon, Sun, Lock, Headphones } from 'lucide-react';
 
 // Geometric circular emblem with Star of David at the center
 const ChabadEmblem = ({ className, size = 64 }) => (
@@ -207,51 +207,21 @@ export default function Login({ initialError = '' }) {
         {/* Left Info Panel */}
         <section className="info-panel">
           <div className="info-content">
-            <h1 className="welcome-heading">Welcome back</h1>
-            <h2 className="membership-heading">to your membership</h2>
-            <div className="gold-diamond-divider">
-              <span className="diamond">♦</span>
+            <div className="info-top-row">
+              <div className="welcome-block">
+                <h1 className="welcome-heading">Welcome back</h1>
+                <h2 className="membership-heading">to your membership</h2>
+                <div className="gold-diamond-divider">
+                  <span className="diamond">♦</span>
+                </div>
+                <p className="intro-text">
+                  Access your membership, contributions, household information, and billing—all in one secure place.
+                </p>
+              </div>
+
+              <BuildingSketch theme={theme} className="building-sketch building-sketch--login" />
             </div>
-            
-            <p className="intro-text">
-              Access your membership, contributions, household information, and billing—all in one secure place.
-            </p>
-
-            <ul className="features-list">
-              <li className="feature-item">
-                <div className="feature-icon-badge">
-                  <Shield size={20} />
-                </div>
-                <div className="feature-text">
-                  <h3>Secure & Private</h3>
-                  <p>Your information is protected with industry-standard security.</p>
-                </div>
-              </li>
-
-              <li className="feature-item">
-                <div className="feature-icon-badge">
-                  <Users size={20} />
-                </div>
-                <div className="feature-text">
-                  <h3>Manage Your Household</h3>
-                  <p>View and update household information with ease.</p>
-                </div>
-              </li>
-
-              <li className="feature-item">
-                <div className="feature-icon-badge">
-                  <CreditCard size={20} />
-                </div>
-                <div className="feature-text">
-                  <h3>Membership & Billing</h3>
-                  <p>View your membership details, contribution history, and billing.</p>
-                </div>
-              </li>
-            </ul>
           </div>
-
-          {/* Building Sketch Facade at bottom of left panel */}
-          <BuildingSketch theme={theme} />
         </section>
 
         {/* Right Form Card Panel */}

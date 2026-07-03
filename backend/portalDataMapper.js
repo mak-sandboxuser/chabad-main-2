@@ -6,7 +6,7 @@ function stripTrailingCommas(jsonText) {
 function repairMakeArrayFieldsJson(text) {
   if (!text || typeof text !== 'string') return text;
 
-  const fields = ['relationships', 'payments', 'pledges', 'recurring', 'contacts'];
+  const fields = ['relationships', 'payments', 'pledges', 'recurring', 'contacts', 'paymentPrograms'];
   let result = text;
 
   for (const field of fields) {
@@ -183,6 +183,38 @@ function getRawPaymentAmount(raw = {}) {
   return parseMoneyValue(paid);
 }
 
+function resolvePledgeAmount(raw = {}) {
+  const positive = parseMoneyValue(raw.OneCRM__Positive_Amount__c ?? raw['Positive Amount']);
+  const outstanding = parseMoneyValue(raw.OneCRM__Amount_Outstanding__c ?? raw['Outstanding Amount']);
+  const paid = parseMoneyValue(raw.OneCRM__Paid__c ?? raw['Paid Amount'] ?? raw.paid);
+  const rawAmount = parseMoneyValue(raw.OneCRM__Amount__c ?? raw.amount ?? raw.Amount);
+
+  if (positive > 0) return positive;
+  if (outstanding > 0) return outstanding + paid;
+  if (rawAmount > 0) return rawAmount;
+  if (paid > 0) return paid;
+  return 0;
+}
+
+function mergePledgeRecords(explicit = [], income = []) {
+  const byId = new Map();
+  [...explicit, ...income].forEach((raw) => {
+    const id = raw.Id || raw.id || raw['Record ID'] || '';
+    const key = id || `${raw.OneCRM__Date__c || raw.date}|${resolvePledgeAmount(raw)}|${raw.OneCRM__Paid__c || 0}`;
+    if (!byId.has(key)) byId.set(key, raw);
+  });
+  return [...byId.values()];
+}
+
+function isIncomePledgeRecord(raw = {}) {
+  const paymentType = String(raw.OneCRM__Payment_Type__c || raw['Payment Type'] || '').trim().toLowerCase();
+  if (paymentType === 'cash') return false;
+  if (paymentType === 'send invoices') return false;
+
+  const amount = resolvePledgeAmount(raw) || getRawPaymentAmount(raw);
+  return amount > 0;
+}
+
 /** Match ChabadOne Contact → Financials → Payments (Cash only, amount > 0). */
 function shouldIncludePaymentRecord(raw = {}, normalized = {}) {
   const amount = getRawPaymentAmount(raw)
@@ -201,6 +233,63 @@ function shouldIncludePaymentRecord(raw = {}, normalized = {}) {
   return false;
 }
 
+function shouldIncludePledgeRecord(raw = {}, normalized = {}) {
+  const paymentType = String(raw.OneCRM__Payment_Type__c || raw['Payment Type'] || normalized.method || '').trim().toLowerCase();
+  if (paymentType === 'cash') return false;
+  if (paymentType === 'send invoices') return false;
+
+  const amount = resolvePledgeAmount(raw)
+    || parseMoneyValue(normalized.amount)
+    || parseMoneyValue(normalized.total);
+  return amount > 0;
+}
+
+function shouldIncludeRecurringRecord(raw = {}, normalized = {}) {
+  const amount = parseMoneyValue(normalized.amount)
+    || parseMoneyValue(raw.OneCRM__Amount_Per_Charge__c)
+    || getRawPaymentAmount(raw);
+  if (amount <= 0) return false;
+
+  const schedule = String(
+    raw.OneCRM__Schedule__c || raw.Schedule || raw.schedule || normalized.frequency || '',
+  ).trim();
+  const frequency = String(
+    raw.OneCRM__Frequency__c || raw.Frequency || raw.frequency || normalized.frequency || '',
+  ).trim();
+  const billingMode = String(raw.billingMode || raw.isRecurring || '').toLowerCase();
+
+  return Boolean(schedule) || Boolean(frequency) || billingMode.includes('recurring');
+}
+
+function filterNormalizedPledges(pledges = []) {
+  const seen = new Set();
+  return pledges
+    .filter((pledge) => {
+      const amount = parseMoneyValue(pledge.amount) || parseMoneyValue(pledge.total);
+      if (amount <= 0) return false;
+      const key = pledge.id && !String(pledge.id).startsWith('pledge_')
+        ? pledge.id
+        : `${pledge.date}|${pledge.amount}|${pledge.paid}|${pledge.outstanding}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+}
+
+function filterNormalizedRecurring(recurring = []) {
+  return recurring
+    .filter((item) => parseMoneyValue(item.amount) > 0)
+    .sort((a, b) => new Date(b.nextDate || 0) - new Date(a.nextDate || 0));
+}
+
+function paymentDedupeKey(payment = {}) {
+  const amount = parseMoneyValue(payment.amount) || parseMoneyValue(payment.total);
+  const method = String(payment.method || payment.type || '').trim().toLowerCase();
+  const date = String(payment.date || '').slice(0, 10);
+  return `${date}|${amount.toFixed(2)}|${method}`;
+}
+
 function filterNormalizedPayments(payments = []) {
   const seen = new Set();
   return payments
@@ -209,7 +298,7 @@ function filterNormalizedPayments(payments = []) {
       if (amount <= 0) return false;
       const method = String(payment.method || payment.type || '').trim().toLowerCase();
       if (method !== 'cash' && !method.includes('stripe')) return false;
-      const key = payment.id || `${payment.date}|${payment.amount}|${method}`;
+      const key = paymentDedupeKey(payment);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -249,18 +338,18 @@ function normalizePayment(raw = {}, index = 0) {
 }
 
 function normalizePledge(raw = {}, index = 0) {
-  const amount = raw.amount ?? raw.Amount ?? raw.OneCRM__Amount__c ?? raw.OneCRM__Positive_Amount__c ?? '';
-  const total = raw.total ?? raw.Total ?? amount;
+  const amountValue = resolvePledgeAmount(raw);
+  const total = raw.total ?? raw.Total ?? amountValue;
   const paid = raw.paid ?? raw.paidAmount ?? raw.Paid ?? raw.OneCRM__Paid__c ?? '';
   const outstanding = raw.outstanding ?? raw.Outstanding ?? raw.OneCRM__Amount_Outstanding__c ?? 0;
   const rawDate = raw.date ?? raw.pledgeDate ?? raw.Date ?? raw['Pledge Date'] ?? raw.OneCRM__Date__c ?? '';
   const date = typeof rawDate === 'string' && rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
 
   return {
-    id: raw.id || raw.pledgeId || raw['Record ID'] || `pledge_${index}`,
-    amount: formatMoneyField(amount),
+    id: raw.id || raw.Id || raw.pledgeId || raw['Record ID'] || `pledge_${index}`,
+    amount: formatMoneyField(amountValue),
     outstanding: formatMoneyField(outstanding) || '$0.00',
-    total: formatMoneyField(total) || formatMoneyField(amount),
+    total: formatMoneyField(total) || formatMoneyField(amountValue),
     paid: formatMoneyField(paid),
     name: raw.name || raw.pledgeName || raw.Name || raw['Pledge Name'] || raw.type || raw.Type || raw.OneCRM__Type__c || 'Pledge',
     parent: raw.parent || raw.parentAccount || raw.accountName || raw['Parent Account'] || raw['Related Contact'] || '',
@@ -275,11 +364,14 @@ function normalizeRecurring(raw = {}, index = 0) {
   const rawNext = raw.nextDate ?? raw.nextChargeDate ?? raw['Next Charge Date'] ?? raw['Next Charge']
     ?? raw.OneCRM__Next_Charge_Date__c ?? raw.OneCRM__Next_Date__c ?? '';
   const nextDate = typeof rawNext === 'string' && rawNext.includes('T') ? rawNext.split('T')[0] : rawNext;
+  const rawAmount = raw.OneCRM__Amount_Per_Charge__c
+    ?? raw.amount ?? raw.Amount ?? raw.OneCRM__Amount__c ?? raw.OneCRM__Total_Estimated_Revenue__c ?? '';
 
   return {
-    id: raw.id || raw.recurringId || raw['Record ID'] || `recurring_${index}`,
-    amount: formatMoneyField(raw.amount ?? raw.Amount ?? raw.OneCRM__Amount__c ?? ''),
-    frequency: raw.frequency || raw.schedule || raw.Frequency || raw.OneCRM__Frequency__c || 'Monthly',
+    id: raw.id || raw.Id || raw.recurringId || raw['Record ID'] || `recurring_${index}`,
+    amount: formatMoneyField(rawAmount),
+    frequency: raw.frequency || raw.schedule || raw.Schedule || raw.OneCRM__Schedule__c
+      || raw.Frequency || raw.OneCRM__Frequency__c || 'Monthly',
     nextDate,
     status: raw.status || raw.Status || raw.OneCRM__Status__c || 'Active',
     method: raw.method || raw.paymentMethod || raw['Payment Method'] || raw.OneCRM__Payment_Type__c || '',
@@ -339,16 +431,37 @@ function extractPortalDataFromPayload(payload, memberDetails = {}) {
     .map(normalizeContact);
   const relationships = unwrapMakeArray(payload.relationships || payload.householdRelationships)
     .map(normalizeRelationship);
-  const rawPayments = unwrapMakeArray(payload.payments || payload.incomePayments);
-  const payments = filterNormalizedPayments(
-    rawPayments
-      .map(normalizePayment)
-      .filter((normalized, index) => shouldIncludePaymentRecord(rawPayments[index], normalized)),
+  const rawAllIncome = unwrapMakeArray(payload.payments || payload.incomePayments);
+  const explicitPledges = unwrapMakeArray(payload.pledges || payload.incomePledges);
+  const incomePledges = rawAllIncome.filter(isIncomePledgeRecord);
+  const rawPledgeRecords = mergePledgeRecords(explicitPledges, incomePledges);
+  const pledgeIdSet = new Set(
+    rawPledgeRecords.map((record) => record.Id || record.id || record['Record ID']).filter(Boolean),
   );
-  const pledges = unwrapMakeArray(payload.pledges || payload.incomePledges)
-    .map(normalizePledge);
-  const recurring = unwrapMakeArray(payload.recurring || payload.recurringBilling || payload.recurringPayments)
-    .map(normalizeRecurring);
+  const rawPaymentRecords = rawAllIncome.filter((record) => {
+    const id = record.Id || record.id || record['Record ID'] || '';
+    if (id && pledgeIdSet.has(id)) return false;
+    return !isIncomePledgeRecord(record);
+  });
+
+  const payments = filterNormalizedPayments(
+    rawPaymentRecords
+      .map(normalizePayment)
+      .filter((normalized, index) => shouldIncludePaymentRecord(rawPaymentRecords[index], normalized)),
+  );
+  const pledges = filterNormalizedPledges(
+    rawPledgeRecords
+      .map(normalizePledge)
+      .filter((normalized, index) => shouldIncludePledgeRecord(rawPledgeRecords[index], normalized)),
+  );
+  const rawRecurring = unwrapMakeArray(
+    payload.recurring || payload.recurringBilling || payload.recurringPayments || payload.paymentPrograms,
+  );
+  const recurring = filterNormalizedRecurring(
+    rawRecurring
+      .map(normalizeRecurring)
+      .filter((normalized, index) => shouldIncludeRecurringRecord(rawRecurring[index], normalized)),
+  );
   const membership = normalizeMembership(payload.membership);
 
   const hasRemotePortalData = contacts.length
@@ -380,13 +493,20 @@ function extractPortalDataFromPayload(payload, memberDetails = {}) {
 
 function mergePaymentsRemoteAndLocal(remotePayments = [], localPayments = []) {
   const merged = [...remotePayments];
-  const seen = new Set(remotePayments.map((item) => item.id).filter(Boolean));
+  const seenIds = new Set(remotePayments.map((item) => item.id).filter(Boolean));
+  const seenKeys = new Set(remotePayments.map((item) => paymentDedupeKey(item)));
 
   for (const payment of localPayments) {
-    if (payment.id && seen.has(payment.id)) continue;
-    if ((payment.method || '').toLowerCase().includes('stripe') || (payment.id || '').includes('stripe')) {
-      merged.unshift(normalizePayment(payment, merged.length));
-    }
+    if (payment.id && seenIds.has(payment.id)) continue;
+    const method = String(payment.method || payment.type || '').toLowerCase();
+    const isStripe = method.includes('stripe') || String(payment.id || '').includes('stripe');
+    if (!isStripe) continue;
+    const normalized = normalizePayment(payment, merged.length);
+    const key = paymentDedupeKey(normalized);
+    if (seenKeys.has(key)) continue;
+    merged.unshift(normalized);
+    seenKeys.add(key);
+    if (normalized.id) seenIds.add(normalized.id);
   }
 
   return merged;

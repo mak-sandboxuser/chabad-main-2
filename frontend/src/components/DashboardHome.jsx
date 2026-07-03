@@ -53,7 +53,7 @@ export default function DashboardHome({
   const recentPayments = payments.slice(0, 4);
   const totalContributed = formatMoney(summary.totalContributed || summary.contributed);
   const activeRecurring = getRecurring(sfData).find(
-    (item) => (item.status || '').toLowerCase() === 'active',
+    (item) => ['active', 'finished', 'open'].includes((item.status || '').toLowerCase()),
   ) || getRecurring(sfData)[0];
 
   return (

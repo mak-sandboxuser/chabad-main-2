@@ -90,6 +90,13 @@ export function getPayments(sfData) {
   return filterDisplayPayments(payments);
 }
 
+function paymentDisplayKey(payment = {}) {
+  const amount = parseMoney(payment.amount) || parseMoney(payment.total);
+  const method = String(payment.method || payment.type || '').trim().toLowerCase();
+  const date = String(payment.date || '').slice(0, 10);
+  return `${date}|${amount.toFixed(2)}|${method}`;
+}
+
 function filterDisplayPayments(payments = []) {
   const seen = new Set();
   return payments
@@ -98,7 +105,7 @@ function filterDisplayPayments(payments = []) {
       if (amount <= 0) return false;
       const method = String(payment.method || payment.type || '').trim().toLowerCase();
       if (method !== 'cash' && !method.includes('stripe')) return false;
-      const key = payment.id || `${payment.date}|${payment.amount}|${method}`;
+      const key = paymentDisplayKey(payment);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -120,11 +127,13 @@ export function sumPaymentsYtd(payments = [], year = new Date().getFullYear()) {
 }
 
 export function getPledges(sfData) {
-  return sfData?.financials?.pledges || [];
+  const pledges = sfData?.financials?.pledges || [];
+  return pledges.filter((item) => parseMoney(item.amount || item.total) > 0);
 }
 
 export function getRecurring(sfData) {
-  return sfData?.financials?.recurring || [];
+  const recurring = sfData?.financials?.recurring || [];
+  return recurring.filter((item) => parseMoney(item.amount) > 0);
 }
 
 export function getMembership(sfData) {

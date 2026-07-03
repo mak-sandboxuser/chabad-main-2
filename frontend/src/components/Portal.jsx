@@ -18,16 +18,22 @@ import { showToast } from '../utils/toast';
 import { fetchPortalApi } from '../utils/portalApi';
 
 const PENDING_CHECKOUT_SESSION_KEY = 'pending_checkout_session_id';
+const syncingCheckoutSessions = new Set();
 
 async function syncCheckoutSession(sessionId, getAuthToken) {
-  if (!sessionId) return false;
-  await fetchPortalApi('/api/payments/confirm-checkout', {
-    getAuthToken,
-    method: 'POST',
-    body: { sessionId },
-  });
-  sessionStorage.removeItem(PENDING_CHECKOUT_SESSION_KEY);
-  return true;
+  if (!sessionId || syncingCheckoutSessions.has(sessionId)) return false;
+  syncingCheckoutSessions.add(sessionId);
+  try {
+    await fetchPortalApi('/api/payments/confirm-checkout', {
+      getAuthToken,
+      method: 'POST',
+      body: { sessionId },
+    });
+    sessionStorage.removeItem(PENDING_CHECKOUT_SESSION_KEY);
+    return true;
+  } finally {
+    syncingCheckoutSessions.delete(sessionId);
+  }
 }
 
 export default function Portal({ user, getAuthToken, onLogout }) {
@@ -118,6 +124,7 @@ export default function Portal({ user, getAuthToken, onLogout }) {
         if (checkoutSessionId) {
           try {
             await syncCheckoutSession(checkoutSessionId, getAuthToken);
+            showToast({ message: 'Payment synced to ChabadOne CRM.', type: 'success' });
             setPaymentAlert({ type: 'success', message: 'Payment synced to ChabadOne CRM. Records will update shortly.' });
           } catch (err) {
             console.error('Payment sync error:', err);
@@ -129,6 +136,8 @@ export default function Portal({ user, getAuthToken, onLogout }) {
         }
 
         await fetchDashboardData();
+        window.setTimeout(() => { fetchDashboardData(); }, 4000);
+        window.setTimeout(() => { fetchDashboardData(); }, 12000);
         window.history.replaceState({}, '', window.location.pathname);
       } else if (isPaymentCancel) {
         showToast({ message: 'Payment cancelled. No charges were made.', type: 'error' });
@@ -139,31 +148,6 @@ export default function Portal({ user, getAuthToken, onLogout }) {
     };
 
     handlePaymentReturn();
-  }, [getAuthToken]);
-
-  useEffect(() => {
-    const pendingSessionId = sessionStorage.getItem(PENDING_CHECKOUT_SESSION_KEY);
-    if (!pendingSessionId) return undefined;
-
-    let cancelled = false;
-
-    const retrySync = async () => {
-      try {
-        await syncCheckoutSession(pendingSessionId, getAuthToken);
-        if (!cancelled) {
-          setPaymentAlert({ type: 'success', message: 'Payment synced to ChabadOne CRM. Records will update shortly.' });
-          await fetchDashboardData();
-        }
-      } catch {
-        // Keep pending session for a later retry when auth/token is ready.
-      }
-    };
-
-    retrySync();
-
-    return () => {
-      cancelled = true;
-    };
   }, [getAuthToken]);
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
@@ -460,6 +444,7 @@ export default function Portal({ user, getAuthToken, onLogout }) {
         user={user}
         getAuthToken={getAuthToken}
         sfData={sfData}
+        onSuccess={fetchDashboardData}
       />
     </div>
   );
