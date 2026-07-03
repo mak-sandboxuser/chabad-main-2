@@ -9,6 +9,7 @@ const {
   parseMakePayload,
   extractPortalDataFromPayload,
   mergePaymentsRemoteAndLocal,
+  filterNormalizedPayments,
 } = require('./portalDataMapper');
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -17,7 +18,7 @@ const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STR
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkeyformagiclinks';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
 const CHECKOUT_SUCCESS_URL = `${FRONTEND_URL}/?payment=success&session_id={CHECKOUT_SESSION_ID}`;
 const CHECKOUT_CANCEL_URL = `${FRONTEND_URL}/?payment=cancel`;
 const processedCheckoutSessions = new Set();
@@ -290,26 +291,36 @@ function formatMoney(amount) {
 }
 
 function deriveMembershipSummary(membership, financials, profile) {
-  if (membership && Object.keys(membership).length) {
-    return membership;
-  }
-
+  const payments = filterNormalizedPayments(financials?.payments || []);
+  const paymentTotal = payments.reduce((sum, item) => sum + parseMoney(item.amount || item.total), 0);
   const pledges = financials?.pledges || [];
   const recurring = financials?.recurring || [];
-  const annualCommitment = pledges.reduce((sum, item) => sum + parseMoney(item.total || item.amount), 0);
-  const contributed = pledges.reduce((sum, item) => sum + parseMoney(item.paid || item.amount), 0);
+  const annualFromPledges = pledges.reduce((sum, item) => sum + parseMoney(item.total || item.amount), 0);
   const activeRecurring = recurring.find((item) => (item.status || '').toLowerCase() === 'active') || recurring[0];
+
+  if (membership && Object.keys(membership).length) {
+    const annual = parseMoney(membership.annualCommitment) || annualFromPledges;
+    const contributed = paymentTotal || parseMoney(membership.contributedYtd);
+    return {
+      ...membership,
+      contributedYtd: formatMoney(contributed),
+      outstanding: formatMoney(Math.max(annual - contributed, 0)),
+    };
+  }
+
+  const annualCommitment = annualFromPledges || parseMoney(profile?.householdDonationTotal);
+  const contributed = paymentTotal;
 
   return {
     tier: 'Member',
     status: profile?.lifecycleStatus || 'Active',
     memberSince: '',
     renewalDate: activeRecurring?.nextDate || '',
-    annualCommitment: annualCommitment ? formatMoney(annualCommitment) : formatMoney(parseMoney(profile?.householdDonationTotal)),
+    annualCommitment: annualCommitment ? formatMoney(annualCommitment) : '$0.00',
     contributedYtd: formatMoney(contributed),
     outstanding: formatMoney(Math.max(annualCommitment - contributed, 0)),
     autoRenewal: activeRecurring ? 'Enabled' : 'Disabled',
-    paymentMethod: activeRecurring?.method || '',
+    paymentMethod: activeRecurring?.method || 'Cash',
     paymentMethodExpiry: activeRecurring?.cardExpiry || '',
     notes: '',
   };
@@ -450,22 +461,24 @@ async function lookupSalesforcePortalData(email, contactId, memberDetails = null
 }
 
 function buildFinancialsFromSources(localFinancials = {}, portalData = {}) {
+  const filterPayments = (list = []) => filterNormalizedPayments(list);
+
   if (portalData.fromSalesforce) {
-    const payments = portalData.payments || [];
+    const payments = filterPayments(portalData.payments || []);
     const pledges = portalData.pledges || [];
     const recurring = portalData.recurring || [];
-    const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount), 0);
+    const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount || item.total), 0);
 
     return { totalPayments, payments, pledges, recurring };
   }
 
-  const payments = mergePaymentsRemoteAndLocal(
+  const payments = filterPayments(mergePaymentsRemoteAndLocal(
     portalData.payments || [],
     localFinancials?.payments || [],
-  );
+  ));
   const pledges = mergeArrayPreferRemote(portalData.pledges, localFinancials?.pledges);
   const recurring = mergeArrayPreferRemote(portalData.recurring, localFinancials?.recurring);
-  const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount), 0)
+  const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount || item.total), 0)
     || localFinancials.totalPayments
     || 0;
 
@@ -896,6 +909,71 @@ async function resolveCheckoutContactId(authHeader, email, contactId = '') {
   return resolvedContactId;
 }
 
+function pickCachedAccountId(email, accountId = '') {
+  if (accountId) return accountId;
+  if (email) {
+    return userSalesforceData[email.toLowerCase()]?.accountId || '';
+  }
+  return '';
+}
+
+function toSalesforceDateIso(dateStr = '') {
+  const dateOnly = (dateStr || new Date().toISOString().split('T')[0]).slice(0, 10);
+  return `${dateOnly}T04:00:00.000Z`;
+}
+
+function buildCheckoutClientReferenceId(payload) {
+  return [
+    payload.accountId || '',
+    payload.contactId || '',
+    String(payload.paymentAmount ?? ''),
+    payload.paymentDate || '',
+    payload.paymentType || 'Donation',
+  ].join('|');
+}
+
+function parseCheckoutClientReferenceId(clientReferenceId = '') {
+  const parts = String(clientReferenceId || '').split('|');
+  if (parts.length < 2) return {};
+  return {
+    accountId: parts[0] || '',
+    contactId: parts[1] || '',
+    paymentAmount: parseFloat(parts[2]) || 0,
+    paymentDate: parts[3] || '',
+    paymentType: parts[4] || 'Donation',
+  };
+}
+
+async function resolveCheckoutAccountId(authHeader, email, accountId = '') {
+  let resolvedAccountId = pickCachedAccountId(email, accountId);
+  if (resolvedAccountId) return resolvedAccountId;
+
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.split(' ')[1];
+      const decoded = await verifyClerkSessionToken(token);
+      const clerkUser = await clerkClient.users.getUser(decoded.sub);
+      const clerkEmail = clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase();
+      resolvedAccountId = userSalesforceData[clerkEmail]?.accountId || '';
+      if (resolvedAccountId) return resolvedAccountId;
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  if (email) {
+    try {
+      const result = await buildPortalSfData(email);
+      resolvedAccountId = result.sfData?.accountId || result.sfData?.account?.id || '';
+      if (resolvedAccountId) return resolvedAccountId;
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  return '';
+}
+
 function buildQuickPaymentPayload(body, contactId) {
   const pledgeAmount = parseFloat(body.pledgeAmount) || 0;
   const paymentAmount = parseFloat(body.paymentAmount) || 0;
@@ -918,9 +996,10 @@ function buildQuickPaymentPayload(body, contactId) {
 }
 
 async function triggerQuickPaymentWebhook(payload) {
-  const webhookUrl = process.env.MAKE_QUICK_PAYMENT_WEBHOOK_URL;
+  const webhookUrl = process.env.MAKE_QUICK_PAYMENT_WEBHOOK_URL
+    || process.env.MAKE_STRIPE_PAYMENT_WEBHOOK_URL;
   if (!webhookUrl) {
-    throw new Error('MAKE_QUICK_PAYMENT_WEBHOOK_URL is not configured.');
+    throw new Error('MAKE_QUICK_PAYMENT_WEBHOOK_URL or MAKE_STRIPE_PAYMENT_WEBHOOK_URL is not configured.');
   }
 
   const response = await fetch(webhookUrl, {
@@ -939,7 +1018,8 @@ async function triggerQuickPaymentWebhook(payload) {
 async function triggerStripePaymentWebhook(payload) {
   const webhookUrl = process.env.MAKE_STRIPE_PAYMENT_WEBHOOK_URL;
   if (!webhookUrl) {
-    throw new Error('MAKE_STRIPE_PAYMENT_WEBHOOK_URL is not configured.');
+    console.log('[PAYMENT] MAKE_STRIPE_PAYMENT_WEBHOOK_URL not set — skipping portal webhook (Stripe Dashboard webhook handles sync).');
+    return null;
   }
 
   const response = await fetch(webhookUrl, {
@@ -952,29 +1032,34 @@ async function triggerStripePaymentWebhook(payload) {
     throw new Error(`Make.com Stripe payment webhook returned ${response.status}`);
   }
 
+  console.log(`[PAYMENT] Make webhook sent: accountId=${payload.accountId || '(missing)'}, contactId=${payload.contactId || '(missing)'}, amount=${payload.paymentAmount}`);
   return response.text();
 }
 
 function buildPayloadFromCheckoutSession(session) {
   const metadata = session.metadata || {};
+  const refData = parseCheckoutClientReferenceId(session.client_reference_id);
   const email = (metadata.email || session.customer_email || session.customer_details?.email || '').toLowerCase();
-  const paymentAmount = parseFloat(metadata.paymentAmount) || (session.amount_total ? session.amount_total / 100 : 0);
+  const paymentAmount = parseFloat(metadata.paymentAmount)
+    || refData.paymentAmount
+    || (session.amount_total ? session.amount_total / 100 : 0);
   const pledgeAmount = parseFloat(metadata.pledgeAmount) || 0;
   const billingMode = metadata.billingMode === 'recurring' ? 'recurring' : 'regular';
 
   return {
     email,
-    contactId: metadata.contactId || '',
-    accountId: metadata.accountId || '',
+    contactId: metadata.contactId || refData.contactId || '',
+    accountId: metadata.accountId || refData.accountId || '',
     purpose: metadata.purpose || 'portal_payment',
-    paymentType: metadata.paymentType || 'Donation',
+    paymentType: metadata.paymentType || refData.paymentType || 'Donation',
     subType: metadata.subType || 'General',
     memo: metadata.memo || '',
     pledgeAmount,
     paymentAmount,
     billingMode,
     isRecurring: metadata.isRecurring === 'true' || billingMode === 'recurring' ? 'true' : 'false',
-    paymentDate: metadata.paymentDate || new Date().toISOString().split('T')[0],
+    paymentDate: metadata.paymentDate || refData.paymentDate || new Date().toISOString().split('T')[0],
+    paymentDateIso: toSalesforceDateIso(metadata.paymentDate || refData.paymentDate || ''),
     source: metadata.source || 'member_portal',
     stripeSessionId: session.id,
     stripePaymentStatus: session.payment_status,
@@ -1000,7 +1085,8 @@ app.post('/api/payments/quick-payment', async (req, res) => {
   }
 
   const contactId = await resolveCheckoutContactId(authHeader, email, body.contactId || '');
-  const payload = buildQuickPaymentPayload(body, contactId);
+  const accountId = await resolveCheckoutAccountId(authHeader, email, body.accountId || '');
+  const payload = buildQuickPaymentPayload({ ...body, accountId }, contactId);
 
   // Pledge-only or recurring setup without immediate Stripe charge
   if (paymentAmount <= 0) {
@@ -1037,8 +1123,11 @@ app.post('/api/payments/quick-payment', async (req, res) => {
         quantity: 1,
       }],
       mode: 'payment',
+      client_reference_id: buildCheckoutClientReferenceId({ ...payload, contactId }),
       metadata: {
         ...payload,
+        donorId: payload.accountId || '',
+        paymentDateIso: toSalesforceDateIso(payload.paymentDate),
         pledgeAmount: String(pledgeAmount),
         paymentAmount: String(paymentAmount),
       },
@@ -1046,6 +1135,7 @@ app.post('/api/payments/quick-payment', async (req, res) => {
       cancel_url: CHECKOUT_CANCEL_URL,
     });
 
+    console.log(`[PAYMENT] checkout session ${session.id} metadata: accountId=${payload.accountId || '(missing)'}, contactId=${contactId || '(missing)'}, email=${email}`);
     res.json({ url: session.url });
   } catch (error) {
     console.error('Error creating Stripe Checkout Session:', error);
@@ -1096,16 +1186,29 @@ app.post('/api/payments/confirm-checkout', async (req, res) => {
     if (!payload.email) {
       payload.email = userEmail;
     }
+    if (!payload.accountId) {
+      payload.accountId = await resolveCheckoutAccountId(authHeader, payload.email, '');
+    }
+    if (!payload.contactId) {
+      payload.contactId = await resolveCheckoutContactId(authHeader, payload.email, '');
+    }
 
     if (processedCheckoutSessions.has(sessionId)) {
       return res.json({ success: true, alreadyProcessed: true, message: 'Payment already synced to ChabadOne CRM.' });
     }
 
+    if (!process.env.MAKE_STRIPE_PAYMENT_WEBHOOK_URL) {
+      return res.status(500).json({
+        error: 'MAKE_STRIPE_PAYMENT_WEBHOOK_URL is not configured. Add your Make.com Custom Webhook URL to backend/.env',
+      });
+    }
+
     await triggerStripePaymentWebhook(payload);
     processedCheckoutSessions.add(sessionId);
 
-    console.log(`[PAYMENT] confirm-checkout synced to Make.com for ${payload.email}, amount: ${payload.paymentAmount}`);
-    res.json({ success: true, message: 'Payment synced to ChabadOne CRM.' });
+    const message = 'Payment synced to ChabadOne CRM.';
+    console.log(`[PAYMENT] confirm-checkout OK for ${payload.email}, amount: ${payload.paymentAmount}, accountId: ${payload.accountId || '(missing)'}`);
+    res.json({ success: true, message });
   } catch (error) {
     console.error('Error confirming Stripe checkout:', error);
     res.status(500).json({ error: error.message });

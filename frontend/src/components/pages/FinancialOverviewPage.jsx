@@ -7,6 +7,7 @@ import PortalPageLayout from '../shared/PortalPageLayout';
 import {
   formatAddress,
   formatDisplayDate,
+  formatMoney,
   getAccount,
   getFinancialSummary,
   getMembership,
@@ -33,7 +34,9 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
           <div>
             <span className="dash-stat-label">Outstanding Balance</span>
             <strong className="financial-big">${summary.outstanding.toFixed(2)}</strong>
-            <small className="text-warn">{100 - summary.progressPct}% of annual commitment remaining</small>
+            <small className="text-warn">
+              {summary.paymentCount ? `${summary.paymentCount} payments · ${formatMoney(summary.totalContributed)} contributed` : 'No payment history yet'}
+            </small>
           </div>
         </div>
         <div className="financial-top-col">
@@ -87,15 +90,19 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
               <tr><th>Date</th><th>Description</th><th>Amount</th><th>Payment Method</th><th>Status</th></tr>
             </thead>
             <tbody>
-              {payments.slice(0, 5).map((p, i) => (
+              {payments.length ? payments.slice(0, 5).map((p, i) => (
                 <tr key={p.id || i}>
                   <td>{formatDisplayDate(p.date)}</td>
-                  <td>{p.subType || p.type}</td>
+                  <td>{p.type || p.subType || 'Donation'}</td>
                   <td>{p.amount}</td>
-                  <td>{p.method || '—'}</td>
+                  <td>{p.method || 'Cash'}</td>
                   <td><span className="badge badge-active">{p.status || 'Paid'}</span></td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan={5} className="portal-empty-table">No payments on file.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

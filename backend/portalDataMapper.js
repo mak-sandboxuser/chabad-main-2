@@ -162,6 +162,61 @@ function formatMoneyField(value) {
   return String(value);
 }
 
+function parseMoneyValue(value) {
+  if (value == null || value === '') return 0;
+  if (typeof value === 'number') return Math.abs(value);
+  const normalized = String(value).replace(/[^0-9.-]/g, '');
+  const amount = parseFloat(normalized);
+  return Number.isFinite(amount) ? Math.abs(amount) : 0;
+}
+
+function getRawPaymentAmount(raw = {}) {
+  const positiveAmount = raw['Positive Amount'] ?? raw.OneCRM__Positive_Amount__c;
+  if (positiveAmount != null && positiveAmount !== '') {
+    return parseMoneyValue(positiveAmount);
+  }
+  const rawAmount = raw.amount ?? raw.Amount ?? raw.OneCRM__Amount__c;
+  if (typeof rawAmount === 'number' && rawAmount !== 0) {
+    return Math.abs(rawAmount);
+  }
+  const paid = raw.paid ?? raw['Paid Amount'] ?? raw.OneCRM__Paid__c;
+  return parseMoneyValue(paid);
+}
+
+/** Match ChabadOne Contact → Financials → Payments (Cash only, amount > 0). */
+function shouldIncludePaymentRecord(raw = {}, normalized = {}) {
+  const amount = getRawPaymentAmount(raw)
+    || parseMoneyValue(normalized.amount)
+    || parseMoneyValue(normalized.total);
+  if (amount <= 0) return false;
+
+  const paymentType = String(
+    raw.OneCRM__Payment_Type__c ?? raw['Payment Type'] ?? raw.method ?? normalized.method ?? '',
+  ).trim().toLowerCase();
+  const method = String(normalized.method || raw.method || '').trim().toLowerCase();
+
+  if (paymentType === 'cash' || method === 'cash') return true;
+  if (method.includes('stripe')) return true;
+
+  return false;
+}
+
+function filterNormalizedPayments(payments = []) {
+  const seen = new Set();
+  return payments
+    .filter((payment) => {
+      const amount = parseMoneyValue(payment.amount) || parseMoneyValue(payment.total);
+      if (amount <= 0) return false;
+      const method = String(payment.method || payment.type || '').trim().toLowerCase();
+      if (method !== 'cash' && !method.includes('stripe')) return false;
+      const key = payment.id || `${payment.date}|${payment.amount}|${method}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+}
+
 function normalizePayment(raw = {}, index = 0) {
   const positiveAmount = raw['Positive Amount'] ?? raw.OneCRM__Positive_Amount__c;
   const rawAmount = raw.amount ?? raw.Amount ?? raw.OneCRM__Amount__c;
@@ -284,8 +339,12 @@ function extractPortalDataFromPayload(payload, memberDetails = {}) {
     .map(normalizeContact);
   const relationships = unwrapMakeArray(payload.relationships || payload.householdRelationships)
     .map(normalizeRelationship);
-  const payments = unwrapMakeArray(payload.payments || payload.incomePayments)
-    .map(normalizePayment);
+  const rawPayments = unwrapMakeArray(payload.payments || payload.incomePayments);
+  const payments = filterNormalizedPayments(
+    rawPayments
+      .map(normalizePayment)
+      .filter((normalized, index) => shouldIncludePaymentRecord(rawPayments[index], normalized)),
+  );
   const pledges = unwrapMakeArray(payload.pledges || payload.incomePledges)
     .map(normalizePledge);
   const recurring = unwrapMakeArray(payload.recurring || payload.recurringBilling || payload.recurringPayments)
@@ -341,4 +400,6 @@ module.exports = {
   unwrapMakeArray,
   normalizeContact,
   normalizePayment,
+  filterNormalizedPayments,
+  parseMoneyValue,
 };

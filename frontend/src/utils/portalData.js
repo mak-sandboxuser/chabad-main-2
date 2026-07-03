@@ -86,7 +86,37 @@ export function getRelationships(sfData) {
 }
 
 export function getPayments(sfData) {
-  return sfData?.financials?.payments || [];
+  const payments = sfData?.financials?.payments || [];
+  return filterDisplayPayments(payments);
+}
+
+function filterDisplayPayments(payments = []) {
+  const seen = new Set();
+  return payments
+    .filter((payment) => {
+      const amount = parseMoney(payment.amount) || parseMoney(payment.total);
+      if (amount <= 0) return false;
+      const method = String(payment.method || payment.type || '').trim().toLowerCase();
+      if (method !== 'cash' && !method.includes('stripe')) return false;
+      const key = payment.id || `${payment.date}|${payment.amount}|${method}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+}
+
+export function sumPaymentsTotal(payments = []) {
+  return payments.reduce((sum, item) => sum + parseMoney(item.amount || item.total), 0);
+}
+
+export function sumPaymentsYtd(payments = [], year = new Date().getFullYear()) {
+  return payments.reduce((sum, item) => {
+    if (!item.date) return sum + parseMoney(item.amount || item.total);
+    const paymentYear = new Date(item.date).getFullYear();
+    if (paymentYear !== year) return sum;
+    return sum + parseMoney(item.amount || item.total);
+  }, 0);
 }
 
 export function getPledges(sfData) {
@@ -124,13 +154,19 @@ export function getMembership(sfData) {
 
 export function getFinancialSummary(sfData) {
   const membership = getMembership(sfData);
+  const payments = getPayments(sfData);
+  const totalContributed = sumPaymentsTotal(payments);
+  const contributedYtd = sumPaymentsYtd(payments) || parseMoney(membership.contributedYtd);
   const annual = parseMoney(membership.annualCommitment);
-  const contributed = parseMoney(membership.contributedYtd);
-  const outstanding = parseMoney(membership.outstanding);
+  const contributed = contributedYtd || totalContributed || parseMoney(membership.contributedYtd);
+  const outstanding = Math.max(annual - contributed, 0);
   const pct = annual > 0 ? Math.round((contributed / annual) * 100) : 0;
 
   return {
     ...membership,
+    totalContributed,
+    contributedYtd: formatMoney(contributedYtd || contributed),
+    paymentCount: payments.length,
     annual,
     contributed,
     outstanding,

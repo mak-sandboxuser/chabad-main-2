@@ -16,7 +16,7 @@ createRoot(document.getElementById('root')).render(
     afterSignUpUrl="/"
     signInForceRedirectUrl="/"
     signUpForceRedirectUrl="/"
-    allowedRedirectOrigins={['http://localhost:5173', 'http://localhost:5174']}
+    allowedRedirectOrigins={['http://localhost:5174']}
   >
     <App />
   </ClerkProvider>,

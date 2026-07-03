@@ -14,12 +14,14 @@ import {
 import BuildingSketch from './shared/BuildingSketch';
 import {
   formatDisplayDate,
+  formatMoney,
   getAccount,
   getContacts,
   getFinancialSummary,
   getMembership,
   getPayments,
   getRecurring,
+  sumPaymentsTotal,
 } from '../utils/portalData';
 
 const QUICK_ACTIONS = [
@@ -47,7 +49,9 @@ export default function DashboardHome({
   const contacts = getContacts(sfData);
   const membership = getMembership(sfData);
   const summary = getFinancialSummary(sfData);
-  const payments = getPayments(sfData).slice(0, 4);
+  const payments = getPayments(sfData);
+  const recentPayments = payments.slice(0, 4);
+  const totalContributed = formatMoney(summary.totalContributed || summary.contributed);
   const activeRecurring = getRecurring(sfData).find(
     (item) => (item.status || '').toLowerCase() === 'active',
   ) || getRecurring(sfData)[0];
@@ -88,9 +92,9 @@ export default function DashboardHome({
           </button>
           <button type="button" className="dash-stat-card glass-panel" onClick={() => onNavigate('financial')}>
             <div>
-              <span className="dash-stat-label">Annual Commitment</span>
-              <strong>{membership.annualCommitment || '$0.00'}</strong>
-              <small>{membership.renewalDate ? `Renews ${formatDisplayDate(membership.renewalDate)}` : '—'}</small>
+              <span className="dash-stat-label">Total Contributions</span>
+              <strong>{totalContributed}</strong>
+              <small>{summary.paymentCount ? `${summary.paymentCount} payments on file` : 'No payments yet'}</small>
             </div>
             <div className="dash-stat-icon blue"><FileText size={20} /></div>
             <ChevronRight size={16} className="dash-stat-chevron" />
@@ -110,9 +114,9 @@ export default function DashboardHome({
           <div className="dash-contribution-col">
             <span className="dash-stat-label">Total Contributed (YTD)</span>
             <strong className="dash-contribution-amount text-success">
-              {membership.contributedYtd || '$0.00'}
+              {summary.contributedYtd || totalContributed || '$0.00'}
             </strong>
-            <small>of {membership.annualCommitment || '$0.00'} commitment</small>
+            <small>{summary.paymentCount ? `${summary.paymentCount} cash payments synced from CRM` : 'of $0.00 commitment'}</small>
             <div className="dash-progress-track">
               <div className="dash-progress-fill" style={{ width: `${summary.progressPct}%` }} />
             </div>
@@ -123,9 +127,9 @@ export default function DashboardHome({
           <div className="dash-contribution-col">
             <span className="dash-stat-label">Outstanding Balance</span>
             <strong className="dash-contribution-amount text-danger">
-              {membership.outstanding || '$0.00'}
+              {formatMoney(summary.outstanding)}
             </strong>
-            <small>{membership.renewalDate ? `Renewal ${formatDisplayDate(membership.renewalDate)}` : '—'}</small>
+            <small>{membership.annualCommitment !== '$0.00' ? `of ${membership.annualCommitment || '$0.00'} commitment` : 'No outstanding balance'}</small>
             <button type="button" className="dash-btn-gold" onClick={onDonate}>
               Make Payment
             </button>
@@ -159,10 +163,10 @@ export default function DashboardHome({
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.length ? payments.map((row, i) => (
+                  {recentPayments.length ? recentPayments.map((row, i) => (
                     <tr key={row.id || i}>
                       <td>{formatDisplayDate(row.date)}</td>
-                      <td>{row.type || row.subType || '—'}</td>
+                      <td>{row.method || row.type || '—'}</td>
                       <td>{row.amount || '—'}</td>
                       <td><span className="badge badge-active">{row.status || '—'}</span></td>
                     </tr>
