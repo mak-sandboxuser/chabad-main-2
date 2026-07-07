@@ -1,0 +1,22 @@
+PORT=5001
+JWT_SECRET=supersecretkeyformagiclinks
+FRONTEND_URL=http://localhost:5174
+
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=rohitjainltp59@gmail.com
+SMTP_PASS=gdbx hyom buzi vete
+
+CLERK_SECRET_KEY=sk_test_2TQPEK2dyWSgBiakwUxUPl8NaKrKwRqb8yB20g1zRy
+SESSION_CLOCK_SKEW_MS=300000
+MAKE_WEBHOOK_URL=https://hook.us2.make.com/guntjeaj3jsdnv87xvrnion6x6hcikoq
+STRIPE_SECRET_KEY=sk_test_51Tjd5kPLZhLSIQ9nNsZGxGmmF8rx6WY0UCuzXzfEs5OGyBuyd4lEod9yfIHB5e1sr3EOxGt7D6tHqWJnOWmVhZ8c00qj9s09tt
+MAKE_PROFILE_UPDATE_WEBHOOK_URL=https://hook.us2.make.com/183v7boaezk3yr1k7ka03n4ajky8vh77
+MAKE_PORTAL_DATA_WEBHOOK_URL=https://hook.us2.make.com/4y2hgr2u7lx2lf2q27vpb1tx4p7q6fk4
+MAKE_PAYMENTS_WEBHOOK_URL=https://hook.us2.make.com/br7jb7amm2sqdrjq4z51k4mzjeehg1hs
+MAKE_QUICK_PAYMENT_WEBHOOK_URL=https://hook.us2.make.com/fe1pia78iqbyidrwze4yqxbqarwj7uc5
+MAKE_STRIPE_PAYMENT_WEBHOOK_URL=https://hook.us2.make.com/z8e53jmnf6lnmsdccb6iw5gjd62ccol7
+RECURRING_INVOICE_NAME=Invoice - Hebrew School - PDF
+RECURRING_LETTERHEAD_NAME=Letterhead - 220 BW
