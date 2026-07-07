@@ -376,8 +376,10 @@ async function fetchFinancialsFromWebhook(webhookUrl, email, contactId, memberDe
       fetchFinancials: true,
       fetchPledges: true,
       fetchRecurring: true,
-      pledgesLimit: 50,
-      paymentsLimit: 50,
+      pledgesLimit: 100,
+      paymentsLimit: 100,
+      sortBy: 'date',
+      sortDirection: 'DESC',
     }),
   });
 

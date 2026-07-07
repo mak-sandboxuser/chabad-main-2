@@ -1,4 +1,4 @@
-# Render Blueprint — backend API only
+# Render Blueprint
 # Docs: https://render.com/docs/blueprint-spec
 services:
   - type: web
@@ -35,3 +35,22 @@ services:
         sync: false
       - key: RECURRING_LETTERHEAD_NAME
         sync: false
+
+  # Static Site — SPA: public/_redirects sends /verify → index.html
+  - type: web
+    name: church-front
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_APP_URL
+        value: https://church-front-6bdw.onrender.com

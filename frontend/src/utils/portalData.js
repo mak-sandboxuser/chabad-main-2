@@ -103,8 +103,6 @@ function filterDisplayPayments(payments = []) {
     .filter((payment) => {
       const amount = parseMoney(payment.amount) || parseMoney(payment.total);
       if (amount <= 0) return false;
-      const method = String(payment.method || payment.type || '').trim().toLowerCase();
-      if (method !== 'cash' && !method.includes('stripe')) return false;
       const key = paymentDisplayKey(payment);
       if (seen.has(key)) return false;
       seen.add(key);

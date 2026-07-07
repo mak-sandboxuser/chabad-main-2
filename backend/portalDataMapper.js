@@ -172,7 +172,7 @@ function parseMoneyValue(value) {
 
 function getRawPaymentAmount(raw = {}) {
   const positiveAmount = raw['Positive Amount'] ?? raw.OneCRM__Positive_Amount__c;
-  if (positiveAmount != null && positiveAmount !== '') {
+  if (positiveAmount != null && positiveAmount !== '' && parseMoneyValue(positiveAmount) > 0) {
     return parseMoneyValue(positiveAmount);
   }
   const rawAmount = raw.amount ?? raw.Amount ?? raw.OneCRM__Amount__c;
@@ -206,16 +206,35 @@ function mergePledgeRecords(explicit = [], income = []) {
   return [...byId.values()];
 }
 
-function isIncomePledgeRecord(raw = {}) {
+function isSendInvoicesRecord(raw = {}) {
   const paymentType = String(raw.OneCRM__Payment_Type__c || raw['Payment Type'] || '').trim().toLowerCase();
-  if (paymentType === 'cash') return false;
-  if (paymentType === 'send invoices') return false;
+  return paymentType === 'send invoices';
+}
+
+/** ChabadOne Financials → Payments: cash line items and fully paid parent income rows. */
+function isSalesforcePaymentRecord(raw = {}) {
+  if (isSendInvoicesRecord(raw)) return false;
+
+  const paymentType = String(raw.OneCRM__Payment_Type__c || raw['Payment Type'] || '').trim().toLowerCase();
+  const rawAmount = Number(raw.OneCRM__Amount__c ?? raw.Amount ?? 0);
+  const paid = parseMoneyValue(raw.OneCRM__Paid__c ?? raw['Paid Amount'] ?? raw.paid);
+  const outstanding = parseMoneyValue(raw.OneCRM__Amount_Outstanding__c ?? raw['Outstanding Amount'] ?? raw.outstanding);
+
+  if (rawAmount < 0 && paymentType === 'cash') return true;
+  if (rawAmount >= 0 && paid > 0 && outstanding === 0) return true;
+
+  return false;
+}
+
+function isIncomePledgeRecord(raw = {}) {
+  if (isSendInvoicesRecord(raw)) return false;
+  if (isSalesforcePaymentRecord(raw)) return false;
 
   const amount = resolvePledgeAmount(raw) || getRawPaymentAmount(raw);
   return amount > 0;
 }
 
-/** Match ChabadOne Contact → Financials → Payments (Cash only, amount > 0). */
+/** Match ChabadOne Contact → Financials → Payments tab. */
 function shouldIncludePaymentRecord(raw = {}, normalized = {}) {
   const amount = getRawPaymentAmount(raw)
     || parseMoneyValue(normalized.amount)
@@ -229,6 +248,7 @@ function shouldIncludePaymentRecord(raw = {}, normalized = {}) {
 
   if (paymentType === 'cash' || method === 'cash') return true;
   if (method.includes('stripe')) return true;
+  if (isSalesforcePaymentRecord(raw)) return true;
 
   return false;
 }
@@ -296,8 +316,6 @@ function filterNormalizedPayments(payments = []) {
     .filter((payment) => {
       const amount = parseMoneyValue(payment.amount) || parseMoneyValue(payment.total);
       if (amount <= 0) return false;
-      const method = String(payment.method || payment.type || '').trim().toLowerCase();
-      if (method !== 'cash' && !method.includes('stripe')) return false;
       const key = paymentDedupeKey(payment);
       if (seen.has(key)) return false;
       seen.add(key);
@@ -309,12 +327,16 @@ function filterNormalizedPayments(payments = []) {
 function normalizePayment(raw = {}, index = 0) {
   const positiveAmount = raw['Positive Amount'] ?? raw.OneCRM__Positive_Amount__c;
   const rawAmount = raw.amount ?? raw.Amount ?? raw.OneCRM__Amount__c;
-  const amount = positiveAmount
-    ?? (typeof rawAmount === 'number' && rawAmount < 0 ? Math.abs(rawAmount) : rawAmount)
+  const paidRaw = raw.paid ?? raw['Paid Amount'] ?? raw.OneCRM__Paid__c ?? '';
+  const positiveValue = parseMoneyValue(positiveAmount);
+  const amount = (positiveValue > 0 ? positiveValue : null)
+    ?? (typeof rawAmount === 'number' && rawAmount < 0 ? Math.abs(rawAmount) : null)
+    ?? (typeof rawAmount === 'number' && rawAmount > 0 ? rawAmount : null)
+    ?? parseMoneyValue(paidRaw)
     ?? raw['Income Total']
     ?? '';
   const total = raw.total ?? raw.totalAmount ?? raw.Total ?? raw['Income Total'] ?? amount;
-  const paid = raw.paid ?? raw['Paid Amount'] ?? raw.OneCRM__Paid__c ?? '';
+  const paid = paidRaw;
   const outstanding = raw.outstanding ?? raw.outstandingBalance ?? raw.Outstanding
     ?? raw['Outstanding Amount'] ?? raw.OneCRM__Amount_Outstanding__c ?? 0;
   const rawDate = raw.date ?? raw.paymentDate ?? raw.PaymentDate ?? raw['Income Date']
@@ -332,7 +354,8 @@ function normalizePayment(raw = {}, index = 0) {
     payer: raw.payer || raw.payerName || raw.parent || raw.accountName || raw['Payer / Parent'] || raw['Parent Account'] || raw['Related Contact'] || '',
     type: raw.type || raw.paymentType || raw.Type || raw['Payment Type'] || raw['Recognition Type'] || raw.OneCRM__Payment_Type__c || 'Payment',
     subType: raw.subType || raw.subtype || raw.subTypeName || raw['Sub-Type'] || raw['Sub Type'] || '',
-    method: raw.method || raw.paymentMethod || raw['Payment Method'] || raw['Payment Plan'] || raw.OneCRM__Payment_Type__c || '',
+    method: raw.method || raw.paymentMethod || raw['Payment Method'] || raw['Payment Plan'] || raw.OneCRM__Payment_Type__c
+      || (parseMoneyValue(raw.OneCRM__Paid__c ?? raw['Paid Amount']) > 0 ? 'Cash' : ''),
     status: raw.status || raw.Status || raw['Processing Status'] || raw.OneCRM__Status__c || 'Paid',
   };
 }

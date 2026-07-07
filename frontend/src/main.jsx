@@ -9,6 +9,13 @@ if (!PUBLISHABLE_KEY) {
   throw new Error("Missing Publishable Key")
 }
 
+const allowedRedirectOrigins = [
+  'http://localhost:5174',
+  ...(import.meta.env.VITE_APP_URL
+    ? [String(import.meta.env.VITE_APP_URL).replace(/\/$/, '')]
+    : []),
+];
+
 createRoot(document.getElementById('root')).render(
   <ClerkProvider
     publishableKey={PUBLISHABLE_KEY}
@@ -16,7 +23,7 @@ createRoot(document.getElementById('root')).render(
     afterSignUpUrl="/"
     signInForceRedirectUrl="/"
     signUpForceRedirectUrl="/"
-    allowedRedirectOrigins={['http://localhost:5174']}
+    allowedRedirectOrigins={allowedRedirectOrigins}
   >
     <App />
   </ClerkProvider>,
