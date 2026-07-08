@@ -90,6 +90,27 @@ export function getPayments(sfData) {
   return filterDisplayPayments(payments);
 }
 
+function parseSortableDate(value) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return 0;
+  if (/^\d{4}-\d{2}-\d{2}/.test(normalized)) {
+    const [year, month, day] = normalized.slice(0, 10).split('-').map(Number);
+    return new Date(year, month - 1, day).getTime();
+  }
+  const parsed = Date.parse(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function compareFinancialRecordsByRecent(a, b) {
+  const dateDiff = parseSortableDate(b.sortDate || b.date) - parseSortableDate(a.sortDate || a.date);
+  if (dateDiff !== 0) return dateDiff;
+  return String(b.id || '').localeCompare(String(a.id || ''));
+}
+
+function sortFinancialRecordsByRecent(records = []) {
+  return [...records].sort(compareFinancialRecordsByRecent);
+}
+
 function paymentDisplayKey(payment = {}) {
   const amount = parseMoney(payment.amount) || parseMoney(payment.total);
   const method = String(payment.method || payment.type || '').trim().toLowerCase();
@@ -99,16 +120,16 @@ function paymentDisplayKey(payment = {}) {
 
 function filterDisplayPayments(payments = []) {
   const seen = new Set();
-  return payments
-    .filter((payment) => {
+  return sortFinancialRecordsByRecent(
+    payments.filter((payment) => {
       const amount = parseMoney(payment.amount) || parseMoney(payment.total);
       if (amount <= 0) return false;
       const key = paymentDisplayKey(payment);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
-    })
-    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    }),
+  );
 }
 
 export function sumPaymentsTotal(payments = []) {
@@ -126,12 +147,16 @@ export function sumPaymentsYtd(payments = [], year = new Date().getFullYear()) {
 
 export function getPledges(sfData) {
   const pledges = sfData?.financials?.pledges || [];
-  return pledges.filter((item) => parseMoney(item.amount || item.total) > 0);
+  return sortFinancialRecordsByRecent(
+    pledges.filter((item) => parseMoney(item.amount || item.total) > 0),
+  );
 }
 
 export function getRecurring(sfData) {
   const recurring = sfData?.financials?.recurring || [];
-  return recurring.filter((item) => parseMoney(item.amount) > 0);
+  return sortFinancialRecordsByRecent(
+    recurring.filter((item) => parseMoney(item.amount) > 0),
+  );
 }
 
 export function getMembership(sfData) {

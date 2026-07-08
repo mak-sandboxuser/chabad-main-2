@@ -294,13 +294,16 @@ function filterNormalizedPledges(pledges = []) {
       seen.add(key);
       return true;
     })
-    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    .sort((a, b) => compareFinancialRecordsByRecent(a, b));
 }
 
 function filterNormalizedRecurring(recurring = []) {
   return recurring
     .filter((item) => parseMoneyValue(item.amount) > 0)
-    .sort((a, b) => new Date(b.nextDate || 0) - new Date(a.nextDate || 0));
+    .sort((a, b) => compareFinancialRecordsByRecent(
+      { ...a, date: a.nextDate },
+      { ...b, date: b.nextDate },
+    ));
 }
 
 function paymentDedupeKey(payment = {}) {
@@ -308,6 +311,22 @@ function paymentDedupeKey(payment = {}) {
   const method = String(payment.method || payment.type || '').trim().toLowerCase();
   const date = String(payment.date || '').slice(0, 10);
   return `${date}|${amount.toFixed(2)}|${method}`;
+}
+
+function compareFinancialRecordsByRecent(a, b) {
+  const toTime = (record) => {
+    const value = record.sortDate || record.date || '';
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+      const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+      return new Date(year, month - 1, day).getTime();
+    }
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const dateDiff = toTime(b) - toTime(a);
+  if (dateDiff !== 0) return dateDiff;
+  return String(b.id || '').localeCompare(String(a.id || ''));
 }
 
 function filterNormalizedPayments(payments = []) {
@@ -321,7 +340,7 @@ function filterNormalizedPayments(payments = []) {
       seen.add(key);
       return true;
     })
-    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    .sort(compareFinancialRecordsByRecent);
 }
 
 function normalizePayment(raw = {}, index = 0) {
@@ -341,15 +360,17 @@ function normalizePayment(raw = {}, index = 0) {
     ?? raw['Outstanding Amount'] ?? raw.OneCRM__Amount_Outstanding__c ?? 0;
   const rawDate = raw.date ?? raw.paymentDate ?? raw.PaymentDate ?? raw['Income Date']
     ?? raw['Payment Date'] ?? raw.Date ?? raw.OneCRM__Date__c ?? '';
+  const sortDate = typeof rawDate === 'string' ? rawDate : '';
   const date = typeof rawDate === 'string' && rawDate.includes('T')
     ? rawDate.split('T')[0]
     : rawDate;
 
   return {
-    id: raw.id || raw.paymentId || raw['Record ID'] || `payment_${index}`,
+    id: raw.id || raw.paymentId || raw['Record ID'] || raw.Id || `payment_${index}`,
     amount: formatMoneyField(amount) || formatMoneyField(paid) || formatMoneyField(total) || '',
     total: formatMoneyField(total) || formatMoneyField(amount),
     date,
+    sortDate,
     outstanding: formatMoneyField(outstanding) || '$0.00',
     payer: raw.payer || raw.payerName || raw.parent || raw.accountName || raw['Payer / Parent'] || raw['Parent Account'] || raw['Related Contact'] || '',
     type: raw.type || raw.paymentType || raw.Type || raw['Payment Type'] || raw['Recognition Type'] || raw.OneCRM__Payment_Type__c || 'Payment',
