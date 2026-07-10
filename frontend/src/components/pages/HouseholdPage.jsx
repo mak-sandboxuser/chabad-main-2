@@ -1,37 +1,33 @@
 import React, { useState } from 'react';
 import {
-  Home, Users, User, Phone, Mail, MapPin, Lock,
+  Home, Users, Phone, Mail, MapPin, Lock,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
 import SectionTabs from '../shared/SectionTabs';
 import ContactsTable from '../shared/ContactsTable';
-import DataTable from '../shared/DataTable';
 import {
   formatAddress,
   formatDisplayDate,
   getAccount,
   getContacts,
-  getRelationships,
 } from '../../utils/portalData';
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: Home },
   { id: 'contacts', label: 'Contacts', icon: Users },
-  { id: 'relationships', label: 'Relationships', icon: User },
 ];
 
 export default function HouseholdPage({ theme, sfData, onNavigate, onViewMember, onDonate }) {
   const [activeTab, setActiveTab] = useState('contacts');
   const account = getAccount(sfData);
   const contacts = getContacts(sfData);
-  const relationships = getRelationships(sfData);
   const primaryContact = contacts.find((c) => c.isPrimary) || contacts[0];
 
   return (
     <PortalPageLayout
       theme={theme}
       title={account.name}
-      subtitle="Household profile, contacts, and relationships."
+      subtitle="Household profile and contacts."
       breadcrumbs={[
         { label: 'Dashboard', onClick: () => onNavigate('dashboard') },
         { label: 'Household' },
@@ -97,26 +93,6 @@ export default function HouseholdPage({ theme, sfData, onNavigate, onViewMember,
 
           {activeTab === 'contacts' && (
             <ContactsTable contacts={contacts} onSelectContact={onViewMember} />
-          )}
-
-          {activeTab === 'relationships' && (
-            <div className="section-panel-inner">
-              <div className="section-panel-header">
-                <h3>All Relationships</h3>
-                <span className="section-count">{relationships.length} items</span>
-              </div>
-              <DataTable
-                emptyMessage="No relationships found for this household."
-                rows={relationships}
-                columns={[
-                  { key: 'person1', label: 'Related Person' },
-                  { key: 'person2', label: 'Person (Contact)' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'type', label: 'Type' },
-                  { key: 'explanation', label: 'Relationship Explanation' },
-                ]}
-              />
-            </div>
           )}
         </div>
       </div>

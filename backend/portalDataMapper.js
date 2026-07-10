@@ -1,3 +1,9 @@
+const {
+  getPortalFiscalYearRange,
+  isDateInPortalFiscalYear,
+  formatPortalFiscalYearLabel,
+} = require('./portalFiscalYear');
+
 function stripTrailingCommas(jsonText) {
   return jsonText.replace(/,\s*([}\]])/g, '$1');
 }
@@ -335,6 +341,7 @@ function filterNormalizedPayments(payments = []) {
     .filter((payment) => {
       const amount = parseMoneyValue(payment.amount) || parseMoneyValue(payment.total);
       if (amount <= 0) return false;
+      if (!isDateInPortalFiscalYear(payment.sortDate || payment.date)) return false;
       const key = paymentDedupeKey(payment);
       if (seen.has(key)) return false;
       seen.add(key);
@@ -566,4 +573,6 @@ module.exports = {
   normalizePayment,
   filterNormalizedPayments,
   parseMoneyValue,
+  getPortalFiscalYearRange,
+  formatPortalFiscalYearLabel,
 };

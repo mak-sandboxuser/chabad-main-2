@@ -77,7 +77,7 @@ export default function PortalSidebar({ activeTab, onNavigate, isOpen, theme }) 
   return (
     <aside className={`portal-sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-brand">
-        <ChabadSidebarLogo className="sidebar-brand-icon" />
+        <ChabadSidebarLogo />
         <div className="sidebar-brand-text">
           <span className="sidebar-brand-primary">CHABAD</span>
           <span className="sidebar-brand-secondary">BEDFORD</span>
@@ -109,7 +109,7 @@ export default function PortalSidebar({ activeTab, onNavigate, isOpen, theme }) 
             <Headphones size={20} className="sidebar-help-icon" />
             <h4>Need Help?</h4>
             <p>Our support team is here to help.</p>
-            <a href="mailto:support@chabadbedford.com" className="sidebar-help-link">
+            <a href="mailto:info@chabadbedford.com" className="sidebar-help-link">
               Contact Support
               <ArrowRight size={14} />
             </a>

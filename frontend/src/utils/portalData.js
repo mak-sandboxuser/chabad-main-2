@@ -1,3 +1,7 @@
+import { isDateInPortalFiscalYear, getPortalFiscalYearLabel } from './portalFiscalYear';
+
+export { getPortalFiscalYearLabel };
+
 export function getInitials(name = '') {
   return name
     .split(/\s+/)
@@ -124,6 +128,7 @@ function filterDisplayPayments(payments = []) {
     payments.filter((payment) => {
       const amount = parseMoney(payment.amount) || parseMoney(payment.total);
       if (amount <= 0) return false;
+      if (!isDateInPortalFiscalYear(payment.sortDate || payment.date)) return false;
       const key = paymentDisplayKey(payment);
       if (seen.has(key)) return false;
       seen.add(key);
@@ -136,13 +141,8 @@ export function sumPaymentsTotal(payments = []) {
   return payments.reduce((sum, item) => sum + parseMoney(item.amount || item.total), 0);
 }
 
-export function sumPaymentsYtd(payments = [], year = new Date().getFullYear()) {
-  return payments.reduce((sum, item) => {
-    if (!item.date) return sum + parseMoney(item.amount || item.total);
-    const paymentYear = new Date(item.date).getFullYear();
-    if (paymentYear !== year) return sum;
-    return sum + parseMoney(item.amount || item.total);
-  }, 0);
+export function sumPaymentsYtd(payments = []) {
+  return sumPaymentsTotal(payments);
 }
 
 export function getPledges(sfData) {

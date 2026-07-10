@@ -2,57 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth, useClerk } from '@clerk/clerk-react';
 import { useSignInSignal } from '@clerk/clerk-react/experimental';
 import { Mail, ArrowRight, ShieldAlert, Shield, CheckCircle, HelpCircle, Moon, Sun, Lock, Headphones } from 'lucide-react';
-
-// Geometric circular emblem with Star of David at the center
-const ChabadEmblem = ({ className, size = 64 }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 100 100"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-  >
-    <circle cx="50" cy="50" r="46" stroke="currentColor" strokeWidth="2.5" />
-    <circle cx="50" cy="50" r="41" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
-    
-    {Array.from({ length: 12 }).map((_, i) => {
-      const angle = (i * 30 * Math.PI) / 180;
-      const x = 50 + 29 * Math.cos(angle);
-      const y = 50 + 29 * Math.sin(angle);
-      return (
-        <circle
-          key={i}
-          cx={x}
-          cy={y}
-          r="8"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          fill="none"
-        />
-      );
-    })}
-
-    <path
-      d="M50 22 L66 50 L34 50 Z"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    <path
-      d="M50 64 L66 36 L34 36 Z"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    <circle cx="50" cy="46" r="6" stroke="currentColor" strokeWidth="1" fill="none" />
-  </svg>
-);
-
-
 import BuildingSketch from './shared/BuildingSketch';
+import ChabadLogo from './shared/ChabadLogo';
 import { apiUrl } from '../config/api';
 import { authTrace } from '../utils/authTrace';
 import {
@@ -181,11 +132,7 @@ export default function Login({ initialError = '' }) {
       {/* Top Header */}
       <header className="chabad-header">
         <div className="logo-section">
-          <ChabadEmblem className="logo-emblem" size={32} />
-          <div className="logo-text">
-            <span className="brand-primary">CHABAD</span>
-            <span className="brand-secondary">BEDFORD</span>
-          </div>
+          <ChabadLogo className="chabad-logo chabad-logo--header" alt="Chabad Bedford" />
         </div>
         
         <div className="header-links">
@@ -198,7 +145,7 @@ export default function Login({ initialError = '' }) {
             <span>Need help?</span>
           </div>
           <span className="divider">|</span>
-          <a href="mailto:support@chabadbedford.com" className="contact-link">Contact Support</a>
+          <a href="mailto:info@chabadbedford.com" className="contact-link">Contact Support</a>
         </div>
       </header>
 
@@ -230,7 +177,7 @@ export default function Login({ initialError = '' }) {
             {!sentTo ? (
               <form onSubmit={handleSubmit}>
                 <div className="card-top-icon">
-                  <ChabadEmblem size={64} className="card-emblem" />
+                  <ChabadLogo className="chabad-logo chabad-logo--card" alt="Chabad Bedford" />
                 </div>
                 
                 <h2 className="card-title">Sign in to your account</h2>
@@ -275,7 +222,7 @@ export default function Login({ initialError = '' }) {
                   <span className="divider-text">Need help?</span>
                 </div>
 
-                <a href="mailto:support@chabadbedford.com" className="support-link-btn">
+                <a href="mailto:info@chabadbedford.com" className="support-link-btn">
                   <Headphones size={18} className="phone-icon" />
                   <span>Contact Support</span>
                 </a>
@@ -326,7 +273,7 @@ export default function Login({ initialError = '' }) {
             <span className="footer-divider">|</span>
             <a href="#">Terms of Service</a>
             <span className="footer-divider">|</span>
-            <a href="mailto:support@chabadbedford.com">Contact Support</a>
+            <a href="mailto:info@chabadbedford.com">Contact Support</a>
           </div>
         </div>
         

@@ -1100,12 +1100,42 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .sidebar-brand {
-  padding: 28px 24px 22px;
+  padding: 18px 16px 16px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
+  min-height: 72px;
+}
+
+.chabad-logo {
+  display: block;
+  height: auto;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.chabad-logo--header {
+  height: 36px;
+  width: auto;
+}
+
+.chabad-logo--card {
+  height: 76px;
+  width: auto;
+  margin: 0 auto;
+}
+
+.chabad-logo--sidebar {
+  height: 44px;
+  width: auto;
+  max-width: 44px;
+  object-fit: contain;
+  object-position: center;
 }
 
 .sidebar-brand-icon {
@@ -3624,7 +3654,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .section-panel-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
@@ -3633,6 +3663,13 @@ h1, h2, h3, h4, h5, h6 {
 .section-panel-header h3 {
   margin: 0;
   font-size: 16px;
+}
+
+.section-panel-subcopy {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
 }
 
 .section-count {
