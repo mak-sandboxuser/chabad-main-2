@@ -4,25 +4,68 @@ import {
   RotateCcw, CreditCard, Landmark,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
-import { formatDisplayDate, getPayments, parseMoney } from '../../utils/portalData';
+import {
+  formatDisplayDate,
+  getAccount,
+  getPayments,
+  parseMoney,
+  getPortalFiscalYearLabel,
+} from '../../utils/portalData';
+import { downloadContributionsStatement } from '../../utils/exportContributionsStatement';
+import { showToast } from '../../utils/toast';
 
-export default function ContributionsPage({ theme, sfData, onDonate }) {
+export default function ContributionsPage({ theme, sfData, onDonate, user }) {
   const [page, setPage] = useState(1);
   const payments = getPayments(sfData);
+  const account = getAccount(sfData);
+  const fiscalPeriodLabel = getPortalFiscalYearLabel();
   const totalContributed = payments.reduce((sum, item) => sum + parseMoney(item.amount), 0);
   const lastPayment = payments[0];
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(payments.length / pageSize));
+  const pagedPayments = payments.slice((page - 1) * pageSize, page * pageSize);
+
+  const handleExport = () => {
+    if (!payments.length) {
+      showToast({ message: 'No contributions to export for this period.', type: 'error' });
+      return;
+    }
+
+    downloadContributionsStatement({
+      payments,
+      memberName: user?.name || sfData?.name || 'Member',
+      accountName: account.name,
+      email: user?.email || sfData?.email || account.email,
+    });
+    showToast({ message: 'Contribution statement downloaded.', type: 'success' });
+  };
 
   return (
     <PortalPageLayout
       theme={theme}
       title="Contribution History"
-      subtitle="View your historical contributions and payment records."
+      subtitle={`Contributions for ${fiscalPeriodLabel}. Records reset each September 1.`}
     >
       <div className="contributions-summary-row">
         {[
-          { label: 'Total Contributed', value: `$${totalContributed.toFixed(2)}`, sub: `${payments.length} payments on file`, icon: Heart },
-          { label: 'Total Contributions', value: String(payments.length), sub: 'All time contributions', icon: Calendar },
-          { label: 'Last Contribution', value: formatDisplayDate(lastPayment?.date), sub: lastPayment?.amount || '—', icon: Clock },
+          {
+            label: 'Total Contributed',
+            value: `$${totalContributed.toFixed(2)}`,
+            sub: `${payments.length} payments this period`,
+            icon: Heart,
+          },
+          {
+            label: 'Total Contributions',
+            value: String(payments.length),
+            sub: fiscalPeriodLabel,
+            icon: Calendar,
+          },
+          {
+            label: 'Last Contribution',
+            value: formatDisplayDate(lastPayment?.date),
+            sub: lastPayment?.amount || '—',
+            icon: Clock,
+          },
         ].map((c) => {
           const Icon = c.icon;
           return (
@@ -51,11 +94,13 @@ export default function ContributionsPage({ theme, sfData, onDonate }) {
           <Filter size={16} />
           <select defaultValue="all"><option>All Types</option></select>
         </div>
-        <button type="button" className="dash-btn-outline"><Upload size={16} /> Export Statement</button>
+        <button type="button" className="dash-btn-outline" onClick={handleExport}>
+          <Upload size={16} /> Export Statement
+        </button>
       </div>
 
       <div className="contributions-filter-meta">
-        <span>{payments.length} Contributions Found</span>
+        <span>{payments.length} Contributions Found · {fiscalPeriodLabel}</span>
         <button type="button" className="portal-text-link"><RotateCcw size={14} /> Clear all filters</button>
       </div>
 
@@ -71,7 +116,7 @@ export default function ContributionsPage({ theme, sfData, onDonate }) {
             </tr>
           </thead>
           <tbody>
-            {payments.length ? payments.map((row, i) => (
+            {payments.length ? pagedPayments.map((row, i) => (
               <tr key={row.id || i}>
                 <td>{formatDisplayDate(row.date)}</td>
                 <td><strong>{row.amount}</strong></td>
@@ -96,13 +141,24 @@ export default function ContributionsPage({ theme, sfData, onDonate }) {
           </tbody>
         </table>
 
-        {payments.length > 10 && (
+        {payments.length > pageSize && (
           <div className="table-pagination">
-            <span>Showing 1 to 10 of {payments.length} contributions</span>
+            <span>
+              Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, payments.length)} of {payments.length} contributions
+            </span>
             <div className="pagination-controls">
               <button type="button" disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft size={16} /></button>
-              <button type="button" className={page === 1 ? 'active' : ''} onClick={() => setPage(1)}>1</button>
-              <button type="button" onClick={() => setPage(2)}><ChevronRight size={16} /></button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  type="button"
+                  className={page === pageNumber ? 'active' : ''}
+                  onClick={() => setPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+              <button type="button" disabled={page === totalPages} onClick={() => setPage(page + 1)}><ChevronRight size={16} /></button>
             </div>
           </div>
         )}

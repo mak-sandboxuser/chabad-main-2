@@ -334,6 +334,7 @@ export default function Portal({ user, getAuthToken, onLogout }) {
             <ContributionsPage
               theme={theme}
               sfData={sfData}
+              user={user}
               onDonate={() => setShowDonateModal(true)}
             />
           )}
@@ -408,19 +409,19 @@ export default function Portal({ user, getAuthToken, onLogout }) {
                   <Mail size={22} style={{ color: 'var(--color-accent)', marginBottom: '12px' }} />
                   <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px' }}>Email Support</h3>
                   <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: 1.5 }}>Send us a message and we&apos;ll respond within one business day.</p>
-                  <a href="mailto:support@chabadbedford.com" style={{ color: 'var(--color-accent)', fontWeight: 600, fontSize: '14px' }}>support@chabadbedford.com</a>
+                  <a href="mailto:info@chabadbedford.com" style={{ color: 'var(--color-accent)', fontWeight: 600, fontSize: '14px' }}>info@chabadbedford.com</a>
                 </div>
                 <div className="glass-panel" style={{ padding: '28px' }}>
                   <Phone size={22} style={{ color: 'var(--color-accent)', marginBottom: '12px' }} />
                   <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px' }}>Phone Support</h3>
                   <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: 1.5 }}>Call our office during business hours for immediate assistance.</p>
-                  <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '14px' }}>(914) 555-0123</span>
+                  <a href="tel:+19146666065" style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '14px' }}>914.666.6065</a>
                 </div>
                 <div className="glass-panel" style={{ padding: '28px' }}>
                   <Headphones size={22} style={{ color: 'var(--color-accent)', marginBottom: '12px' }} />
                   <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px' }}>Contact Support</h3>
                   <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: 1.5 }}>We&apos;re here to help you with any questions about your account.</p>
-                  <a href="mailto:support@chabadbedford.com" className="btn btn-secondary" style={{ marginTop: '4px' }}>Get Help</a>
+                  <a href="mailto:info@chabadbedford.com" className="btn btn-secondary" style={{ marginTop: '4px' }}>Get Help</a>
                 </div>
               </div>
             </div>

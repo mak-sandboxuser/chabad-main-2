@@ -132,7 +132,7 @@ export default function MembershipPage({ theme, sfData, onNavigate, onDonate }) 
             <ul className="dash-actions-list">
               {[
                 { label: 'View Contribution History', sub: 'See your past contributions and payments', icon: Clock, tab: 'contributions' },
-                { label: 'View Financials', sub: 'Payments, pledges, and recurring billing', icon: Download, tab: 'financial' },
+                { label: 'View Financials', sub: 'Payments, outstanding amounts, and recurring billing', icon: Download, tab: 'financial' },
                 { label: 'Manage Renewal Preferences', sub: 'Update your renewal and payment settings', icon: Settings, tab: 'recurring' },
               ].map(({ label, sub, icon: Icon, tab }) => (
                 <li key={label}>

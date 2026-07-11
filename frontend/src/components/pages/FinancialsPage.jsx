@@ -9,11 +9,12 @@ import {
   getPayments,
   getPledges,
   getRecurring,
+  getPortalFiscalYearLabel,
 } from '../../utils/portalData';
 
 const TABS = [
   { id: 'payments', label: 'Payments', icon: Wallet },
-  { id: 'pledges', label: 'Pledges', icon: Wallet },
+  { id: 'pledges', label: 'Outstanding Amount', icon: Wallet },
   { id: 'recurring', label: 'Recurring Billing', icon: RefreshCw },
 ];
 
@@ -38,7 +39,7 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
     <PortalPageLayout
       theme={theme}
       title="Financials"
-      subtitle="Payments, pledges, and recurring billing for your account."
+      subtitle="Payments, outstanding amounts, and recurring billing for your account."
       showSketch={false}
     >
       <div className="account-header-card glass-panel">
@@ -62,11 +63,18 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
 
         <div className="section-panel">
           <div className="section-panel-header">
-            <h3>
-              {activeTab === 'payments' && 'All Payments'}
-              {activeTab === 'pledges' && 'All Pledges'}
-              {activeTab === 'recurring' && 'Recurring Billing'}
-            </h3>
+            <div>
+              <h3>
+                {activeTab === 'payments' && 'All Payments'}
+                {activeTab === 'pledges' && 'Outstanding Amount'}
+                {activeTab === 'recurring' && 'Recurring Billing'}
+              </h3>
+              {activeTab === 'payments' && (
+                <p className="section-panel-subcopy">
+                  Showing payments for {getPortalFiscalYearLabel()}. Older records reset each September 1.
+                </p>
+              )}
+            </div>
             <span className="section-count">{counts[activeTab]} items</span>
           </div>
 
@@ -90,7 +98,7 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
 
           {activeTab === 'pledges' && (
             <DataTable
-              emptyMessage="No pledges found."
+              emptyMessage="No outstanding amount records found."
               rows={pledges}
               columns={[
                 { key: 'status', label: '', render: (row) => <StatusIcon status={row.status} /> },

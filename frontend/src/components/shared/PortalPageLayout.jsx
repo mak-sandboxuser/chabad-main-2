@@ -11,7 +11,7 @@ export function PortalPageFooter() {
         <span>|</span>
         <a href="#">Terms of Service</a>
         <span>|</span>
-        <a href="mailto:support@chabadbedford.com">Contact Support</a>
+        <a href="mailto:info@chabadbedford.com">Contact Support</a>
       </div>
     </footer>
   );

@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { DollarSign, Lock, RefreshCw, X } from 'lucide-react';
 import { fetchPortalApi } from '../../utils/portalApi';
 import { showToast } from '../../utils/toast';
-import { PAYMENT_SUBTYPES, PAYMENT_TYPES, RECURRING_FREQUENCIES } from '../../constants/paymentOptions';
+import { RECURRING_FREQUENCIES } from '../../constants/paymentOptions';
+
+const PAYMENT_TYPE = 'Donation';
+const PAYMENT_SUBTYPE = 'General';
 
 function todayIsoDate() {
   return new Date().toISOString().split('T')[0];
@@ -18,8 +21,6 @@ export default function QuickPaymentModal({
   purpose = 'Chabad Bedford Payment',
 }) {
   const [billingMode, setBillingMode] = useState('regular');
-  const [paymentType, setPaymentType] = useState('Donation');
-  const [subType, setSubType] = useState('General');
   const [memo, setMemo] = useState('');
   const [pledgeAmount, setPledgeAmount] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -30,8 +31,6 @@ export default function QuickPaymentModal({
   useEffect(() => {
     if (!open) return;
     setBillingMode('regular');
-    setPaymentType('Donation');
-    setSubType('General');
     setMemo('');
     setPledgeAmount('');
     setPaymentAmount('');
@@ -67,8 +66,8 @@ export default function QuickPaymentModal({
           contactId: sfData?.contactId || '',
           accountId: sfData?.accountId || sfData?.account?.id || '',
           purpose,
-          paymentType,
-          subType,
+          paymentType: PAYMENT_TYPE,
+          subType: PAYMENT_SUBTYPE,
           memo,
           pledgeAmount: parsedPledge,
           paymentAmount: parsedPayment,
@@ -142,18 +141,14 @@ export default function QuickPaymentModal({
           <div className="quick-pay-grid">
             <div>
               <label className="profile-field-label">Type</label>
-              <div className="profile-field-box profile-field-box--editable">
-                <select className="profile-field-input profile-field-select" value={paymentType} onChange={(e) => setPaymentType(e.target.value)} required>
-                  {PAYMENT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-                </select>
+              <div className="profile-field-box">
+                <span className="profile-field-value">{PAYMENT_TYPE}</span>
               </div>
             </div>
             <div>
               <label className="profile-field-label">Sub-Type</label>
-              <div className="profile-field-box profile-field-box--editable">
-                <select className="profile-field-input profile-field-select" value={subType} onChange={(e) => setSubType(e.target.value)} required>
-                  {PAYMENT_SUBTYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-                </select>
+              <div className="profile-field-box">
+                <span className="profile-field-value">{PAYMENT_SUBTYPE}</span>
               </div>
             </div>
           </div>

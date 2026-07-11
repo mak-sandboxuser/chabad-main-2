@@ -10,6 +10,7 @@ const {
   extractPortalDataFromPayload,
   filterNormalizedPayments,
 } = require('./portalDataMapper');
+const { getPortalFiscalYearRange, formatPortalFiscalYearLabel } = require('./portalFiscalYear');
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
@@ -510,6 +511,7 @@ function buildFinancialsFromSources(portalData = {}) {
   const pledges = portalData.pledges || [];
   const recurring = portalData.recurring || [];
   const totalPayments = payments.reduce((sum, item) => sum + parseMoney(item.amount || item.total), 0);
+  const fiscalYear = getPortalFiscalYearRange();
 
   return {
     fromSalesforce: Boolean(portalData.fromSalesforce),
@@ -517,6 +519,11 @@ function buildFinancialsFromSources(portalData = {}) {
     payments,
     pledges,
     recurring,
+    fiscalYear: {
+      startDate: fiscalYear.startDate,
+      endDate: fiscalYear.endDate,
+      label: formatPortalFiscalYearLabel(fiscalYear),
+    },
   };
 }
 
