@@ -1,27 +1,79 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Home, Users, Phone, Mail, MapPin, Lock,
+  Home, Users, User, Phone, Mail, MapPin, Lock, UserPlus,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
 import SectionTabs from '../shared/SectionTabs';
 import ContactsTable from '../shared/ContactsTable';
+import RelationshipsTable from '../shared/RelationshipsTable';
+import AddFamilyMemberModal from '../shared/AddFamilyMemberModal';
+import { fetchPortalApi } from '../../utils/portalApi';
 import {
   formatAddress,
-  formatDisplayDate,
   getAccount,
   getContacts,
+  getHouseholdAccountContext,
+  getRelationships,
 } from '../../utils/portalData';
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: Home },
   { id: 'contacts', label: 'Contacts', icon: Users },
+  { id: 'relationships', label: 'Relationships', icon: User },
 ];
 
-export default function HouseholdPage({ theme, sfData, onNavigate, onViewMember, onDonate }) {
+export default function HouseholdPage({
+  theme,
+  sfData,
+  user,
+  getAuthToken,
+  onNavigate,
+  onViewMember,
+  onDonate,
+  onHouseholdUpdated,
+}) {
   const [activeTab, setActiveTab] = useState('contacts');
+  const [showAddFamilyModal, setShowAddFamilyModal] = useState(false);
+  const [householdLoading, setHouseholdLoading] = useState(false);
+  const [householdError, setHouseholdError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadHouseholdData = async () => {
+      setHouseholdLoading(true);
+      setHouseholdError('');
+      try {
+        const data = await fetchPortalApi('/api/household/data', {
+          getAuthToken,
+          method: 'POST',
+        });
+        if (!cancelled && data.sfData) {
+          await onHouseholdUpdated?.(data.sfData);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setHouseholdError(err.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setHouseholdLoading(false);
+        }
+      }
+    };
+
+    loadHouseholdData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getAuthToken]);
+
   const account = getAccount(sfData);
   const contacts = getContacts(sfData);
-  const primaryContact = contacts.find((c) => c.isPrimary) || contacts[0];
+  const relationships = getRelationships(sfData);
+  const household = getHouseholdAccountContext(sfData);
+  const { primaryContact, secondaryContact, memberCount } = household;
 
   return (
     <PortalPageLayout
@@ -48,6 +100,9 @@ export default function HouseholdPage({ theme, sfData, onNavigate, onViewMember,
           </div>
         </div>
         <div className="account-header-actions">
+          <button type="button" className="dash-btn-outline" onClick={() => setShowAddFamilyModal(true)}>
+            <UserPlus size={16} /> Add Family Members
+          </button>
           <button type="button" className="dash-btn-gold" onClick={onDonate}>
             <Lock size={16} /> Quick Payment
           </button>
@@ -56,6 +111,13 @@ export default function HouseholdPage({ theme, sfData, onNavigate, onViewMember,
 
       <div className="section-card glass-panel">
         <SectionTabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
+
+        {householdLoading && (
+          <p className="section-panel-inner text-muted">Loading household contacts from Salesforce…</p>
+        )}
+        {householdError && (
+          <p className="section-panel-inner text-danger">{householdError}</p>
+        )}
 
         <div className="section-panel section-panel--flush">
           {activeTab === 'profile' && (
@@ -73,20 +135,20 @@ export default function HouseholdPage({ theme, sfData, onNavigate, onViewMember,
                 <div className="profile-field-box">{formatAddress(account)}</div>
               </div>
               <div className="profile-field">
-                <label className="profile-field-label">Primary Member</label>
+                <label className="profile-field-label">Primary Contact</label>
                 <div className="profile-field-box">{primaryContact?.name || sfData?.name || '—'}</div>
               </div>
               <div className="profile-field">
-                <label className="profile-field-label">Member Since</label>
-                <div className="profile-field-box">{formatDisplayDate(sfData?.membership?.memberSince || sfData?.joinedDate)}</div>
+                <label className="profile-field-label">Secondary Contact</label>
+                <div className="profile-field-box">{secondaryContact?.name || '—'}</div>
               </div>
               <div className="profile-field">
-                <label className="profile-field-label">Household Members</label>
-                <div className="profile-field-box">{contacts.length}</div>
+                <label className="profile-field-label">Household Total Members</label>
+                <div className="profile-field-box">{memberCount}</div>
               </div>
               <div className="profile-field">
-                <label className="profile-field-label">Salesforce Contact ID</label>
-                <div className="profile-field-box">{sfData?.contactId || '—'}</div>
+                <label className="profile-field-label">Salesforce Account ID</label>
+                <div className="profile-field-box">{household.householdAccountId || '—'}</div>
               </div>
             </div>
           )}
@@ -94,8 +156,27 @@ export default function HouseholdPage({ theme, sfData, onNavigate, onViewMember,
           {activeTab === 'contacts' && (
             <ContactsTable contacts={contacts} onSelectContact={onViewMember} />
           )}
+
+          {activeTab === 'relationships' && (
+            <RelationshipsTable relationships={relationships} />
+          )}
         </div>
       </div>
+
+      <AddFamilyMemberModal
+        open={showAddFamilyModal}
+        onClose={() => setShowAddFamilyModal(false)}
+        user={user}
+        getAuthToken={getAuthToken}
+        sfData={sfData}
+        onSuccess={async (nextSfData) => {
+          if (nextSfData) {
+            await onHouseholdUpdated?.(nextSfData);
+          } else {
+            await onHouseholdUpdated?.();
+          }
+        }}
+      />
     </PortalPageLayout>
   );
 }

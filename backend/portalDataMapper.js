@@ -105,16 +105,134 @@ function toBool(value) {
   return normalized === 'true' || normalized === 'yes' || normalized === '1';
 }
 
+function resolveContactRole(raw = {}) {
+  const explicitRole = raw.role
+    || raw.contactRole
+    || raw['Role']
+    || raw.Roles
+    || raw['Roles']
+    || '';
+  const normalizedRole = String(explicitRole || '').trim();
+  if (normalizedRole && !/^member$/i.test(normalizedRole)) {
+    return normalizedRole;
+  }
+
+  if (toBool(raw.isPrimary ?? raw.primaryMember ?? raw.primary ?? raw.IsPrimaryMember)) {
+    return 'Parent';
+  }
+  if (toBool(raw.isSecondary ?? raw.secondaryMember ?? raw.secondary)) {
+    return 'Parent';
+  }
+
+  const memberType = String(raw.memberType || '').trim().toLowerCase();
+  if (memberType === 'child') return 'Child';
+  if (memberType === 'primary' || memberType === 'secondary') return 'Parent';
+
+  return normalizedRole || 'Member';
+}
+
+function getContactKey(contact = {}) {
+  const key = String(contact.contactId || contact.id || '').trim();
+  return key.startsWith('003') ? key : '';
+}
+
+function mergeContactsList(...lists) {
+  const merged = new Map();
+
+  lists.flat().filter(Boolean).forEach((contact, index) => {
+    const normalized = normalizeContact(contact, index);
+    const key = getContactKey(normalized);
+    if (!key) return;
+    const existing = merged.get(key) || {};
+    merged.set(key, { ...existing, ...normalized });
+  });
+
+  return [...merged.values()];
+}
+
+function extractAllContactsFromPayload(payload = {}) {
+  const sources = [
+    payload.contacts,
+    payload.householdContacts,
+    payload.accountContacts,
+    payload.householdMembers,
+    payload.members,
+    payload.accountContactRelations,
+    payload.contactsByAccount,
+    payload.searchResults,
+  ];
+
+  return mergeContactsList(...sources.map((source) => unwrapMakeArray(source)));
+}
+
 function normalizeContact(raw = {}, index = 0) {
+  const contactId = String(
+    raw.contactId
+    || raw.Id
+    || raw.id
+    || raw['Contact ID']
+    || raw['Record ID']
+    || '',
+  ).trim();
+  const firstName = raw.firstName || raw.FirstName || raw['First Name'] || '';
+  const lastName = raw.lastName || raw.LastName || raw['Last Name'] || '';
+  const isPrimary = toBool(
+    raw.isPrimary
+    ?? raw.primaryMember
+    ?? raw.primary
+    ?? raw.IsPrimaryMember
+    ?? raw['Primary Member']
+    ?? raw.OneCRM__Primary_Member__c,
+  );
+  const isSecondary = toBool(
+    raw.isSecondary
+    ?? raw.secondaryMember
+    ?? raw.secondary
+    ?? raw.IsSecondaryMember
+    ?? raw['Secondary Member']
+    ?? raw.OneCRM__Secondary_Member__c,
+  );
+
   return {
-    id: raw.id || raw.contactId || `contact_${index}`,
-    name: raw.name || [raw.firstName, raw.lastName].filter(Boolean).join(' ').trim() || 'Member',
-    role: raw.role || raw.contactRole || 'Member',
-    isPrimary: toBool(raw.isPrimary ?? raw.primaryMember ?? raw.primary),
-    isSecondary: toBool(raw.isSecondary ?? raw.secondaryMember ?? raw.secondary),
-    contactId: raw.contactId || raw.id || '',
-    email: raw.email || '',
-    phone: raw.phone || raw.mobile || '',
+    id: contactId || raw.id || `contact_${index}`,
+    name: raw.name
+      || raw.Name
+      || raw['Full Name']
+      || [firstName, lastName].filter(Boolean).join(' ').trim()
+      || 'Member',
+    role: resolveContactRole({ ...raw, isPrimary, isSecondary }),
+    isPrimary,
+    isSecondary,
+    contactId,
+    email: raw.email || raw.Email || '',
+    phone: raw.phone || raw.mobile || raw.MobilePhone || raw.Phone || '',
+    street: raw.street || raw.MailingStreet || raw['Mailing Street'] || '',
+    city: raw.city || raw.MailingCity || raw['Mailing City'] || '',
+    state: raw.state || raw.MailingState || raw['Mailing State'] || '',
+    postalCode: raw.postalCode || raw.MailingPostalCode || raw['Mailing Postal Code'] || '',
+    country: raw.country || raw.MailingCountry || raw['Mailing Country'] || '',
+  };
+}
+
+function mergeHouseholdPortalData(portalData = {}, householdData = null) {
+  if (!householdData) return portalData;
+
+  return {
+    ...portalData,
+    fromSalesforce: Boolean(portalData.fromSalesforce || householdData.fromSalesforce),
+    accountId: householdData.accountId || portalData.accountId || '',
+    accountName: householdData.accountName || portalData.accountName || '',
+    phone: householdData.phone || portalData.phone || '',
+    email: householdData.email || portalData.email || '',
+    street: householdData.street || portalData.street || '',
+    city: householdData.city || portalData.city || '',
+    state: householdData.state || portalData.state || '',
+    postalCode: householdData.postalCode || portalData.postalCode || '',
+    country: householdData.country || portalData.country || '',
+    contacts: mergeContactsList(portalData.contacts, householdData.contacts),
+    relationships: householdData.relationships?.length
+      ? householdData.relationships
+      : (portalData.relationships || []),
   };
 }
 
@@ -478,8 +596,7 @@ function extractPortalDataFromPayload(payload, memberDetails = {}) {
     };
   }
 
-  const contacts = unwrapMakeArray(payload.contacts || payload.householdContacts || payload.accountContacts)
-    .map(normalizeContact);
+  const contacts = extractAllContactsFromPayload(payload);
   const relationships = unwrapMakeArray(payload.relationships || payload.householdRelationships)
     .map(normalizeRelationship);
   const rawAllIncome = unwrapMakeArray(payload.payments || payload.incomePayments);
@@ -563,10 +680,101 @@ function mergePaymentsRemoteAndLocal(remotePayments = [], localPayments = []) {
   return merged;
 }
 
+function normalizeSearchContact(raw = {}, index = 0) {
+  const contactId = raw.contactId
+    || raw['Contact ID']
+    || raw.Id
+    || raw.id
+    || raw['Record ID']
+    || '';
+  const firstName = raw.firstName || raw.FirstName || raw['First Name'] || '';
+  const lastName = raw.lastName || raw.LastName || raw['Last Name'] || '';
+  const name = raw.name
+    || raw['Full Name']
+    || raw.Name
+    || raw.fullName
+    || [firstName, lastName].filter(Boolean).join(' ').trim();
+
+  return {
+    contactId,
+    name,
+    currentFamily: raw.currentFamily
+      || raw['Primary Family']
+      || raw.accountName
+      || raw['Current Family']
+      || raw['Account Name']
+      || raw.Account?.Name
+      || '',
+    street: raw.street
+      || raw['Mailing Street']
+      || raw.primaryStreet
+      || raw['Primary Street']
+      || raw.MailingStreet
+      || '',
+    city: raw.city
+      || raw['Mailing City']
+      || raw.primaryCity
+      || raw['Primary City']
+      || raw.MailingCity
+      || '',
+    phone: raw.phone
+      || raw.mobile
+      || raw['Mobile Phone']
+      || raw.MobilePhone
+      || raw.Phone
+      || '',
+    email: raw.email || raw.Email || '',
+  };
+}
+
+function isValidSearchContact(contact = {}) {
+  if (contact.contactId?.startsWith('003')) return true;
+  if (contact.email?.includes('@')) return true;
+  return Boolean((contact.name || '').trim());
+}
+
+function memberDetailsToSearchContact(memberDetails = {}) {
+  return {
+    contactId: memberDetails.contactId || '',
+    name: memberDetails.name
+      || [memberDetails.firstName, memberDetails.lastName].filter(Boolean).join(' ').trim()
+      || memberDetails.email?.split('@')[0]
+      || '',
+    currentFamily: memberDetails.accountName || memberDetails.profile?.accountName || '',
+    street: memberDetails.street || '',
+    city: memberDetails.city || '',
+    phone: memberDetails.mobile || memberDetails.phone || memberDetails.homePhone || '',
+    email: memberDetails.email || '',
+  };
+}
+
+function extractSearchContactsFromPayload(payload) {
+  if (!payload) return [];
+
+  const list = unwrapMakeArray(
+    payload.contacts
+    || payload.searchResults
+    || payload.results
+    || payload.records
+    || (Array.isArray(payload) ? payload : []),
+  );
+
+  return list
+    .map(normalizeSearchContact)
+    .filter(isValidSearchContact);
+}
+
 module.exports = {
   parseMakePayload,
   extractPortalDataFromPayload,
+  extractAllContactsFromPayload,
+  extractSearchContactsFromPayload,
+  isValidSearchContact,
+  memberDetailsToSearchContact,
+  normalizeSearchContact,
   buildContactsFromMemberDetails,
+  mergeContactsList,
+  mergeHouseholdPortalData,
   mergePaymentsRemoteAndLocal,
   unwrapMakeArray,
   normalizeContact,

@@ -8,9 +8,15 @@ const db = require('./db');
 const {
   parseMakePayload,
   extractPortalDataFromPayload,
+  extractSearchContactsFromPayload,
+  memberDetailsToSearchContact,
+  mergeContactsList,
+  mergeHouseholdPortalData,
+  mergePaymentsRemoteAndLocal,
   filterNormalizedPayments,
 } = require('./portalDataMapper');
 const { getPortalFiscalYearRange, formatPortalFiscalYearLabel } = require('./portalFiscalYear');
+const { validateAddFamilyMemberRequest } = require('./householdMemberRules');
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
@@ -442,15 +448,24 @@ async function lookupSalesforcePayments(email, contactId, memberDetails = null) 
   }
 }
 
-async function fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDetails = null) {
+async function fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDetails = null, options = {}) {
+  const accountId = options.accountId || memberDetails?.accountId || '';
+  const body = {
+    email: email.toLowerCase(),
+    contactId: contactId || '',
+    accountId,
+    fetchPortal: true,
+  };
+
+  if (options.fetchAccountContacts) {
+    body.fetchAccountContacts = true;
+    body.action = 'fetch_account_contacts';
+  }
+
   const response = await fetch(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: email.toLowerCase(),
-      contactId: contactId || '',
-      fetchPortal: true,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -464,11 +479,176 @@ async function fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDe
   return extractPortalDataFromPayload(payload, memberDetails || {});
 }
 
+async function fetchAccountContactsFromMake(accountId, email, contactId, memberDetails = null) {
+  const webhookUrl = process.env.MAKE_PORTAL_DATA_WEBHOOK_URL;
+  if (!webhookUrl || !accountId?.startsWith('001')) {
+    return null;
+  }
+
+  return fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDetails, {
+    accountId,
+    fetchAccountContacts: true,
+  });
+}
+
+async function fetchHouseholdDataFromWebhook(webhookUrl, email, contactId, memberDetails = null) {
+  const accountId = memberDetails?.accountId || '';
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      action: 'fetch_household_data',
+      email: email.toLowerCase(),
+      contactId: contactId || '',
+      accountId,
+      fetchHousehold: true,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error(`Make.com household webhook returned ${response.status} for ${email} (${webhookUrl})`);
+    return null;
+  }
+
+  const text = await response.text();
+  console.log(`Make.com household data for ${email}:`, text.slice(0, 800));
+  const payload = parseMakePayload(text);
+  return extractPortalDataFromPayload(payload, memberDetails || {});
+}
+
+async function lookupHouseholdData(email, contactId, memberDetails = null) {
+  const webhookUrl = process.env.MAKE_HOUSEHOLD_DATA_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return null;
+  }
+
+  try {
+    return await fetchHouseholdDataFromWebhook(webhookUrl, email, contactId, memberDetails);
+  } catch (error) {
+    console.error(`Error calling Make.com household webhook for ${email}:`, error);
+    return null;
+  }
+}
+
+function applyHouseholdDataToSfData(sfData = {}, householdData = null) {
+  if (!householdData) return sfData;
+
+  const merged = mergeHouseholdPortalData({
+    fromSalesforce: sfData.syncedFromSalesforce,
+    accountId: sfData.accountId || sfData.account?.id,
+    accountName: sfData.account?.name || sfData.profile?.accountName,
+    phone: sfData.account?.phone || sfData.profile?.phone,
+    street: sfData.account?.street || sfData.profile?.street,
+    city: sfData.account?.city || sfData.profile?.city,
+    state: sfData.account?.state || sfData.profile?.state,
+    postalCode: sfData.account?.postalCode || sfData.profile?.postalCode,
+    country: sfData.account?.country || sfData.profile?.country,
+    contacts: sfData.contacts || [],
+    relationships: sfData.relationships || [],
+  }, householdData);
+
+  return {
+    ...sfData,
+    accountId: pickFirstNonEmpty(merged.accountId, sfData.accountId),
+    syncedFromSalesforce: Boolean(sfData.syncedFromSalesforce || merged.fromSalesforce),
+    account: {
+      ...(sfData.account || {}),
+      id: pickFirstNonEmpty(merged.accountId, sfData.account?.id),
+      name: pickFirstNonEmpty(merged.accountName, sfData.account?.name),
+      phone: pickFirstNonEmpty(merged.phone, sfData.account?.phone),
+      street: pickFirstNonEmpty(merged.street, sfData.account?.street),
+      city: pickFirstNonEmpty(merged.city, sfData.account?.city),
+      state: pickFirstNonEmpty(merged.state, sfData.account?.state),
+      postalCode: pickFirstNonEmpty(merged.postalCode, sfData.account?.postalCode),
+      country: pickFirstNonEmpty(merged.country, sfData.account?.country),
+    },
+    profile: {
+      ...(sfData.profile || {}),
+      accountName: pickFirstNonEmpty(merged.accountName, sfData.profile?.accountName),
+      phone: pickFirstNonEmpty(merged.phone, sfData.profile?.phone),
+      street: pickFirstNonEmpty(merged.street, sfData.profile?.street),
+      city: pickFirstNonEmpty(merged.city, sfData.profile?.city),
+      state: pickFirstNonEmpty(merged.state, sfData.profile?.state),
+      postalCode: pickFirstNonEmpty(merged.postalCode, sfData.profile?.postalCode),
+      country: pickFirstNonEmpty(merged.country, sfData.profile?.country),
+    },
+    contacts: merged.contacts,
+    relationships: merged.relationships,
+  };
+}
+
+async function buildHouseholdMemberDetails(auth, requestedContactId) {
+  const contactId = sanitizeContactId(requestedContactId);
+  if (!contactId?.startsWith('003')) {
+    return { error: 'A valid Salesforce Contact ID is required.' };
+  }
+
+  const householdData = await lookupHouseholdData(auth.email, auth.contactId, {
+    accountId: auth.accountId,
+    email: auth.email,
+    name: auth.accountName,
+  });
+
+  const cached = userSalesforceData[auth.email] || {};
+  const mergedHousehold = householdData
+    ? applyHouseholdDataToSfData(cached, householdData)
+    : cached;
+  const contacts = mergedHousehold.contacts || [];
+  const allowedIds = new Set(
+    contacts.map((contact) => sanitizeContactId(contact.contactId || contact.id)).filter(Boolean),
+  );
+
+  if (!allowedIds.has(contactId) && contactId !== auth.contactId) {
+    return { error: 'This contact is not part of your household account.' };
+  }
+
+  const contact = contacts.find((item) => item.contactId === contactId) || {
+    contactId,
+    name: 'Member',
+    role: 'Member',
+  };
+
+  let profileDetails = null;
+  if (contact.email?.includes('@')) {
+    const lookup = await lookupSalesforceMember(contact.email.toLowerCase());
+    if (lookup.found) {
+      profileDetails = lookup.memberDetails;
+    }
+  } else if (contactId === auth.contactId) {
+    const lookup = await lookupSalesforceMember(auth.email);
+    if (lookup.found) {
+      profileDetails = lookup.memberDetails;
+    }
+  }
+
+  const profile = profileDetails ? buildProfileFromDetails(profileDetails) : {};
+
+  return {
+    member: {
+      ...contact,
+      contactId,
+      email: pickFirstNonEmpty(contact.email, profileDetails?.email, ''),
+      phone: pickFirstNonEmpty(contact.phone, profile.mobile, profile.phone, profileDetails?.mobile, ''),
+      street: pickFirstNonEmpty(contact.street, profile.street, profileDetails?.street, ''),
+      city: pickFirstNonEmpty(contact.city, profile.city, profileDetails?.city, ''),
+      state: pickFirstNonEmpty(contact.state, profile.state, profileDetails?.state, ''),
+      postalCode: pickFirstNonEmpty(contact.postalCode, profile.postalCode, profileDetails?.postalCode, ''),
+      country: pickFirstNonEmpty(contact.country, profile.country, profileDetails?.country, ''),
+      profile,
+    },
+    sfData: mergedHousehold,
+  };
+}
+
 async function lookupSalesforcePortalData(email, contactId, memberDetails = null) {
   const webhookUrls = [...new Set([
     process.env.MAKE_PORTAL_DATA_WEBHOOK_URL,
     process.env.MAKE_WEBHOOK_URL,
   ].filter(Boolean))];
+
+  const emailLower = email.toLowerCase();
+  const accountId = memberDetails?.accountId || userSalesforceData[emailLower]?.accountId || '';
+  const cachedContacts = userSalesforceData[emailLower]?.contacts || [];
 
   if (!webhookUrls.length) {
     return extractPortalDataFromPayload(null, memberDetails || {});
@@ -476,17 +656,53 @@ async function lookupSalesforcePortalData(email, contactId, memberDetails = null
 
   for (const webhookUrl of webhookUrls) {
     try {
-      let portalData = await fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDetails);
+      let portalData = await fetchPortalDataFromWebhook(
+        webhookUrl,
+        email,
+        contactId,
+        memberDetails,
+        { accountId },
+      );
       if (!portalData) continue;
 
       if (portalData.fromSalesforce && !portalData.relationships?.length) {
         console.warn(`Make.com portal webhook returned no relationships for ${email} — retrying in 3s`);
         await new Promise((resolve) => setTimeout(resolve, 3000));
-        const retryData = await fetchPortalDataFromWebhook(webhookUrl, email, contactId, memberDetails);
+        const retryData = await fetchPortalDataFromWebhook(
+          webhookUrl,
+          email,
+          contactId,
+          memberDetails,
+          { accountId },
+        );
         if (retryData?.relationships?.length) {
           portalData = retryData;
         }
       }
+
+      if (
+        portalData.fromSalesforce
+        && accountId?.startsWith('001')
+        && portalData.contacts.length <= 1
+      ) {
+        const accountContactsData = await fetchAccountContactsFromMake(
+          accountId,
+          email,
+          contactId,
+          memberDetails,
+        );
+        if (accountContactsData?.contacts?.length) {
+          portalData = {
+            ...portalData,
+            contacts: mergeContactsList(portalData.contacts, accountContactsData.contacts),
+          };
+        }
+      }
+
+      portalData = {
+        ...portalData,
+        contacts: mergeContactsList(portalData.contacts, cachedContacts),
+      };
 
       if (
         portalData.fromSalesforce
@@ -503,7 +719,11 @@ async function lookupSalesforcePortalData(email, contactId, memberDetails = null
     }
   }
 
-  return extractPortalDataFromPayload(null, memberDetails || {});
+  const fallback = extractPortalDataFromPayload(null, memberDetails || {});
+  return {
+    ...fallback,
+    contacts: mergeContactsList(fallback.contacts, cachedContacts),
+  };
 }
 
 function buildFinancialsFromSources(portalData = {}) {
@@ -630,10 +850,17 @@ async function buildPortalSfData(email) {
     ),
   };
 
-  const sfData = mergeMemberProfile(memberDetails, mergedPortal);
+  const householdData = await lookupHouseholdData(
+    email,
+    memberDetails.contactId,
+    memberDetails,
+  );
+  const mergedPortalWithHousehold = mergeHouseholdPortalData(mergedPortal, householdData);
+
+  const sfData = mergeMemberProfile(memberDetails, mergedPortalWithHousehold);
 
   userSalesforceData[email] = sfData;
-  return { sfData, memberDetails, portalData: mergedPortal };
+  return { sfData, memberDetails, portalData: mergedPortalWithHousehold };
 }
 
 async function resolveAuthedEmail(token) {
@@ -1600,6 +1827,277 @@ app.post('/api/payments/create-checkout-session', async (req, res) => {
   }
 });
 
+async function resolveAuthedPortalMember(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { error: { status: 401, message: 'Authentication required.' } };
+  }
+
+  const token = authHeader.split(' ')[1];
+  let email;
+
+  if (token === 'dev_token_for_testing') {
+    email = (req.body?.email || 'acc.appledev@gmail.com').toLowerCase();
+  } else {
+    const decoded = await verifyClerkSessionToken(token);
+    const clerkUser = await clerkClient.users.getUser(decoded.sub);
+    email = clerkUser.emailAddresses[0]?.emailAddress?.toLowerCase() || '';
+  }
+
+  if (!email) {
+    return { error: { status: 400, message: 'No email address found for this user.' } };
+  }
+
+  const lookup = await lookupSalesforceMember(email);
+  if (!lookup.found) {
+    return {
+      error: {
+        status: 403,
+        message: 'You are not authorised to login to the member portal.',
+        code: 'unauthorized_member',
+      },
+    };
+  }
+
+  const cached = userSalesforceData[email] || {};
+  let contactId = sanitizeContactId(
+    lookup.memberDetails.contactId || cached.contactId || '',
+  );
+  let accountId = sanitizeAccountId(
+    lookup.memberDetails.accountId || cached.accountId || cached.account?.id || '',
+  );
+
+  if (!accountId?.startsWith('001')) {
+    accountId = await resolveCheckoutAccountId(authHeader, email, accountId);
+  }
+  if (!contactId?.startsWith('003')) {
+    contactId = await resolveCheckoutContactId(authHeader, email, contactId);
+  }
+
+  const contacts = cached.contacts || [];
+  const householdContactIds = contacts
+    .map((contact) => sanitizeContactId(contact.contactId || contact.id))
+    .filter(Boolean);
+  const primaryContact = contacts.find((contact) => contact.isPrimary) || contacts[0] || null;
+  const secondaryContact = contacts.find((contact) => contact.isSecondary) || null;
+
+  return {
+    email,
+    contactId,
+    accountId,
+    accountName: pickFirstNonEmpty(
+      cached.account?.name,
+      cached.profile?.accountName,
+      lookup.memberDetails.profile?.accountName,
+      lookup.memberDetails.name,
+      'Household',
+    ),
+    householdContactIds,
+    primaryContactId: sanitizeContactId(primaryContact?.contactId || contactId),
+    secondaryContactId: sanitizeContactId(secondaryContact?.contactId || ''),
+    memberDetails: lookup.memberDetails,
+  };
+}
+
+function buildHouseholdValidationContext(auth) {
+  const cached = userSalesforceData[auth.email] || {};
+  const contacts = cached.contacts || [];
+  const primaryContact = contacts.find((contact) => contact.isPrimary) || contacts[0] || null;
+  const secondaryContact = contacts.find((contact) => contact.isSecondary) || null;
+
+  return {
+    primaryContact,
+    secondaryContact,
+    householdContactIds: auth.householdContactIds || [],
+  };
+}
+
+function buildLinkContactMeta(body = {}, searchResults = []) {
+  const contactIds = Array.isArray(body.contactIds) ? body.contactIds : [];
+  const metaFromBody = Array.isArray(body.contactMeta) ? body.contactMeta : [];
+
+  return contactIds.map((contactId) => {
+    const fromBody = metaFromBody.find((item) => item.contactId === contactId);
+    const fromSearch = searchResults.find((item) => item.contactId === contactId);
+    return {
+      contactId,
+      name: fromBody?.name || fromSearch?.name || '',
+      currentFamily: fromBody?.currentFamily || fromSearch?.currentFamily || '',
+    };
+  });
+}
+function buildHouseholdRoleFields(memberType) {
+  const role = memberType === 'child' ? 'Child' : 'Parent';
+  return {
+    role,
+    memberType,
+    contactRole: role,
+    householdRole: role,
+    crmRole: role,
+    acrRole: role,
+    acrRoles: role,
+    isPrimary: memberType === 'primary',
+    isSecondary: memberType === 'secondary',
+    isChild: memberType === 'child',
+    isPrimaryMember: memberType === 'primary',
+    isSecondaryMember: memberType === 'secondary',
+  };
+}
+
+function buildAccountFamilyMemberPayload(auth, body, mode) {
+  const householdAccountId = auth.accountId;
+  const memberType = ['primary', 'secondary', 'child'].includes(body.memberType)
+    ? body.memberType
+    : 'child';
+  const roleFields = buildHouseholdRoleFields(memberType);
+
+  const basePayload = {
+    action: 'add_family_member',
+    objectType: 'Account',
+    source: 'member_portal',
+    operation: mode === 'link' ? 'link_existing' : 'create_new',
+    householdAccountId,
+    accountId: householdAccountId,
+    accountName: auth.accountName,
+    requestedByContactId: auth.contactId,
+    requestedByEmail: auth.email,
+    ...roleFields,
+  };
+
+  if (mode === 'link') {
+    return {
+      ...basePayload,
+      contactIdsToAdd: body.contactIds || [],
+      excludeContactIds: auth.householdContactIds,
+    };
+  }
+
+  return {
+    ...basePayload,
+    salutation: String(body.salutation || '').trim(),
+    firstName: String(body.firstName || '').trim(),
+    lastName: String(body.lastName || '').trim(),
+    gender: String(body.gender || '').trim(),
+    mobilePhone: String(body.mobilePhone || body.phone || '').trim(),
+    contactEmail: String(body.contactEmail || body.memberEmail || '').trim(),
+    groups: body.groups || body.group || '',
+  };
+}
+
+function buildHouseholdRolePayload(auth, contactId, memberType) {
+  const accountId = auth.accountId;
+  const roleFields = buildHouseholdRoleFields(memberType);
+
+  return {
+    action: 'add_family_member',
+    objectType: 'Relationship',
+    source: 'member_portal',
+    operation: 'set_household_role',
+    householdAccountId: accountId,
+    accountId,
+    accountName: auth.accountName,
+    contactId,
+    requestedByContactId: auth.contactId,
+    requestedByEmail: auth.email,
+    ...roleFields,
+    includeInRollUp: true,
+    soqlFindRelationship:
+      `SELECT Id FROM OneCRM__Relationship__c `
+      + `WHERE OneCRM__Contact__c = '${contactId}' `
+      + `AND OneCRM__Account__c = '${accountId}' `
+      + `LIMIT 1`,
+  };
+}
+
+function mergeAddedContactsIntoSfData(sfData, {
+  contactIds = [],
+  contactMeta = [],
+  memberType = 'child',
+} = {}) {
+  if (!sfData || !contactIds.length) return sfData;
+
+  const role = memberType === 'child' ? 'Child' : 'Parent';
+  const contacts = [...(sfData.contacts || [])];
+
+  contactIds.forEach((contactId) => {
+    const meta = contactMeta.find((item) => item.contactId === contactId) || {};
+    const existingIndex = contacts.findIndex((contact) => contact.contactId === contactId);
+
+    if (existingIndex >= 0) {
+      contacts[existingIndex] = {
+        ...contacts[existingIndex],
+        role,
+        isPrimary: memberType === 'primary',
+        isSecondary: memberType === 'secondary',
+      };
+      return;
+    }
+
+    contacts.push({
+      id: contactId,
+      contactId,
+      name: meta.name || 'Member',
+      role,
+      isPrimary: memberType === 'primary',
+      isSecondary: memberType === 'secondary',
+      email: meta.email || '',
+      phone: meta.phone || '',
+    });
+  });
+
+  return {
+    ...sfData,
+    contacts,
+  };
+}
+
+async function postMakeAddFamilyWebhook(webhookUrl, payload, label = 'add family member') {
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await response.text().catch(() => '');
+  if (!response.ok) {
+    throw new Error(`Make.com ${label} returned ${response.status}${text ? `: ${text.slice(0, 200)}` : ''}`);
+  }
+
+  return text;
+}
+
+async function applyHouseholdRolesViaMake(webhookUrl, auth, contactIds, memberType) {
+  const roleWebhookUrl = process.env.MAKE_HOUSEHOLD_ROLE_WEBHOOK_URL;
+  if (!roleWebhookUrl) {
+    return contactIds.map((contactId) => ({
+      contactId,
+      ok: false,
+      skipped: true,
+      error: 'MAKE_HOUSEHOLD_ROLE_WEBHOOK_URL is not configured.',
+    }));
+  }
+
+  const results = [];
+
+  for (const contactId of contactIds) {
+    try {
+      const rolePayload = buildHouseholdRolePayload(auth, contactId, memberType);
+      const responseText = await postMakeAddFamilyWebhook(
+        roleWebhookUrl,
+        rolePayload,
+        'set household role',
+      );
+      results.push({ contactId, ok: true, response: responseText.slice(0, 200) });
+      console.log(`Make.com set household role for ${contactId}:`, responseText.slice(0, 200));
+    } catch (error) {
+      console.warn(`Make.com set household role failed for ${contactId}:`, error.message);
+      results.push({ contactId, ok: false, error: error.message });
+    }
+  }
+
+  return results;
+}
+
 // Verification Endpoint called by Make.com after Stripe success webhook
 app.post('/api/payments/verify', async (req, res) => {
   const { email, amount, type, method } = req.body;
@@ -1613,6 +2111,302 @@ app.post('/api/payments/verify', async (req, res) => {
   } catch (error) {
     console.error('Error recording payment in backend:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/household/data', async (req, res) => {
+  const auth = await resolveAuthedPortalMember(req);
+  if (auth.error) {
+    return res.status(auth.error.status).json({ error: auth.error.message, code: auth.error.code });
+  }
+
+  const webhookUrl = process.env.MAKE_HOUSEHOLD_DATA_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return res.status(503).json({
+      error: 'MAKE_HOUSEHOLD_DATA_WEBHOOK_URL is not configured. Add your household Make.com webhook to backend/.env',
+    });
+  }
+
+  try {
+    const householdData = await lookupHouseholdData(auth.email, auth.contactId, {
+      accountId: auth.accountId,
+      email: auth.email,
+      name: auth.accountName,
+    });
+
+    if (!householdData) {
+      return res.status(502).json({ error: 'Household data could not be loaded from Salesforce.' });
+    }
+
+    const cached = userSalesforceData[auth.email] || {};
+    const sfData = applyHouseholdDataToSfData(cached, householdData);
+    userSalesforceData[auth.email] = sfData;
+
+    res.json({
+      success: true,
+      sfData,
+      householdAccountId: auth.accountId,
+      accountName: auth.accountName,
+      contactCount: sfData.contacts?.length || 0,
+      relationshipCount: sfData.relationships?.length || 0,
+    });
+  } catch (error) {
+    console.error('Household data fetch error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/household/member-details', async (req, res) => {
+  const auth = await resolveAuthedPortalMember(req);
+  if (auth.error) {
+    return res.status(auth.error.status).json({ error: auth.error.message, code: auth.error.code });
+  }
+
+  const webhookUrl = process.env.MAKE_HOUSEHOLD_DATA_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return res.status(503).json({
+      error: 'MAKE_HOUSEHOLD_DATA_WEBHOOK_URL is not configured. Add your household Make.com webhook to backend/.env',
+    });
+  }
+
+  try {
+    const result = await buildHouseholdMemberDetails(auth, req.body?.contactId);
+    if (result.error) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    userSalesforceData[auth.email] = result.sfData;
+
+    res.json({
+      success: true,
+      member: result.member,
+      sfData: result.sfData,
+    });
+  } catch (error) {
+    console.error('Household member details error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/household/search-contacts', async (req, res) => {
+  const auth = await resolveAuthedPortalMember(req);
+  if (auth.error) {
+    return res.status(auth.error.status).json({ error: auth.error.message, code: auth.error.code });
+  }
+
+  const webhookUrl = process.env.MAKE_HOUSEHOLD_SEARCH_CONTACTS_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return res.status(503).json({
+      error: 'MAKE_HOUSEHOLD_SEARCH_CONTACTS_WEBHOOK_URL is not configured. Add your Make.com search webhook to backend/.env',
+    });
+  }
+
+  const query = String(req.body?.query || '').trim();
+  const limit = Math.min(parseInt(req.body?.limit, 10) || 50, 100);
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'search_contacts_for_account',
+        objectType: 'Account',
+        query,
+        searchEmail: query.includes('@') ? query : '',
+        searchName: query.includes('@') ? '' : query,
+        limit,
+        householdAccountId: auth.accountId,
+        accountId: auth.accountId,
+        accountName: auth.accountName,
+        excludeContactIds: auth.householdContactIds,
+        requestedByContactId: auth.contactId,
+        requestedByEmail: auth.email,
+      }),
+    });
+
+    if (!response.ok) {
+      return res.status(502).json({ error: `Make.com contact search returned ${response.status}` });
+    }
+
+    const text = await response.text();
+    const payload = parseMakePayload(text);
+    let contacts = extractSearchContactsFromPayload(payload)
+      .filter((contact) => !auth.householdContactIds.includes(contact.contactId));
+
+    if (!contacts.length && query.includes('@')) {
+      const lookup = await lookupSalesforceMember(query.toLowerCase());
+      if (lookup.found && lookup.memberDetails?.contactId?.startsWith('003')) {
+        const fallbackContact = memberDetailsToSearchContact(lookup.memberDetails);
+        if (!auth.householdContactIds.includes(fallbackContact.contactId)) {
+          contacts = [fallbackContact];
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      contacts,
+      query,
+      householdAccountId: auth.accountId,
+      accountName: auth.accountName,
+    });
+  } catch (error) {
+    console.error('Household contact search error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/household/add-family-member', async (req, res) => {
+  const auth = await resolveAuthedPortalMember(req);
+  if (auth.error) {
+    return res.status(auth.error.status).json({ error: auth.error.message, code: auth.error.code });
+  }
+
+  const webhookUrl = process.env.MAKE_ADD_FAMILY_MEMBER_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return res.status(503).json({
+      error: 'MAKE_ADD_FAMILY_MEMBER_WEBHOOK_URL is not configured. Add your Make.com add-family-member webhook to backend/.env',
+    });
+  }
+
+  if (!auth.accountId?.startsWith('001')) {
+    return res.status(400).json({
+      error: 'Missing Salesforce Household Account ID (001...). Log out, log in again, then retry from the Account page.',
+    });
+  }
+
+  const body = req.body || {};
+  const requestedAccountId = sanitizeAccountId(body.accountId || body.householdAccountId || '');
+  if (requestedAccountId && requestedAccountId !== auth.accountId) {
+    return res.status(403).json({ error: 'You can only add family members to your own household account.' });
+  }
+
+  const mode = body.mode === 'link' ? 'link' : 'create';
+  const memberType = ['primary', 'secondary', 'child'].includes(body.memberType)
+    ? body.memberType
+    : 'child';
+
+  const householdContext = buildHouseholdValidationContext(auth);
+  const linkContacts = mode === 'link'
+    ? buildLinkContactMeta(body, body.searchResults || [])
+    : [];
+  const validation = validateAddFamilyMemberRequest({
+    memberType,
+    household: householdContext,
+    contacts: linkContacts,
+    accountName: auth.accountName,
+  });
+
+  if (!validation.ok) {
+    return res.status(400).json({ error: validation.message });
+  }
+
+  if (mode === 'link') {
+    const contactIds = Array.isArray(body.contactIds)
+      ? body.contactIds.map((id) => sanitizeContactId(id)).filter(Boolean)
+      : [];
+
+    if (!contactIds.length) {
+      return res.status(400).json({ error: 'Select at least one existing contact to add.' });
+    }
+
+    const alreadyInHousehold = contactIds.filter((id) => auth.householdContactIds.includes(id));
+    if (alreadyInHousehold.length) {
+      return res.status(400).json({ error: 'One or more selected contacts are already on this household account.' });
+    }
+
+    try {
+      const webhookPayload = buildAccountFamilyMemberPayload(auth, { ...body, contactIds }, 'link');
+      const makeText = await postMakeAddFamilyWebhook(webhookUrl, webhookPayload, 'add family member (link)');
+      console.log('Make.com add family member (link) response:', makeText.slice(0, 500));
+
+      const roleResults = await applyHouseholdRolesViaMake(webhookUrl, auth, contactIds, memberType);
+      const roleFailures = roleResults.filter((result) => !result.ok);
+      if (roleFailures.length && process.env.MAKE_REQUIRE_HOUSEHOLD_ROLE === 'true') {
+        return res.status(502).json({
+          error: 'Contact linked, but Salesforce role update failed. Complete the set_household_role route in Make.com.',
+          roleResults,
+        });
+      }
+
+      const refreshed = await buildPortalSfData(auth.email);
+      if (refreshed.error) {
+        return res.status(503).json({ error: 'Contact linked, but portal data could not be refreshed.' });
+      }
+
+      const linkContacts = buildLinkContactMeta(body, body.searchResults || []);
+      const sfData = mergeAddedContactsIntoSfData(refreshed.sfData, {
+        contactIds,
+        contactMeta: linkContacts,
+        memberType,
+      });
+      userSalesforceData[auth.email.toLowerCase()] = sfData;
+
+      return res.json({
+        success: true,
+        message: roleFailures.length
+          ? `${contactIds.length} member${contactIds.length > 1 ? 's' : ''} linked to ${auth.accountName}, but Salesforce role update failed. Finish the set_household_role Make route.`
+          : `${contactIds.length} member${contactIds.length > 1 ? 's' : ''} added to ${auth.accountName}.`,
+        sfData,
+        householdAccountId: auth.accountId,
+        roleResults,
+      });
+    } catch (error) {
+      console.error('Add family member (link) error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  const firstName = String(body.firstName || '').trim();
+  const lastName = String(body.lastName || '').trim();
+
+  if (!firstName || !lastName) {
+    return res.status(400).json({ error: 'First Name and Last Name are required.' });
+  }
+
+  const createPayload = buildAccountFamilyMemberPayload(auth, body, 'create');
+
+  try {
+    const makeText = await postMakeAddFamilyWebhook(webhookUrl, createPayload, 'add family member (create)');
+    console.log('Make.com add family member (create) response:', makeText.slice(0, 500));
+
+    let createdContactId = '';
+    try {
+      const parsed = parseMakePayload(makeText);
+      createdContactId = sanitizeContactId(
+        parsed?.contactId || parsed?.id || parsed?.Id || parsed?.recordId || '',
+      );
+    } catch {
+      // Make may return plain Accepted text for create until response mapping is added.
+    }
+
+    if (createdContactId) {
+      await applyHouseholdRolesViaMake(webhookUrl, auth, [createdContactId], memberType);
+    }
+
+    const refreshed = await buildPortalSfData(auth.email);
+    if (refreshed.error) {
+      return res.status(503).json({ error: 'Contact created, but portal data could not be refreshed.' });
+    }
+
+    const sfData = createdContactId
+      ? mergeAddedContactsIntoSfData(refreshed.sfData, {
+        contactIds: [createdContactId],
+        contactMeta: [{ contactId: createdContactId, name: `${firstName} ${lastName}`.trim() }],
+        memberType,
+      })
+      : refreshed.sfData;
+    userSalesforceData[auth.email.toLowerCase()] = sfData;
+
+    return res.json({
+      success: true,
+      message: `${firstName} ${lastName} was added to ${auth.accountName}.`,
+      sfData,
+      householdAccountId: auth.accountId,
+    });
+  } catch (error) {
+    console.error('Add family member (create) error:', error);
+    return res.status(500).json({ error: error.message });
   }
 });
 

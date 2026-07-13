@@ -1,30 +1,93 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Calendar, Shield, MessageSquare, Mail, Phone, MapPin,
   Pencil, Home, ChevronRight, Trash2, User, ShieldCheck,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
-import { getInitials } from '../../utils/portalData';
+import { fetchPortalApi } from '../../utils/portalApi';
+import { formatAddress, getInitials } from '../../utils/portalData';
 
-export default function MemberDetailsPage({ theme, member, sfData, onNavigate }) {
+export default function MemberDetailsPage({
+  theme,
+  member,
+  sfData,
+  getAuthToken,
+  onNavigate,
+  onSfDataUpdate,
+}) {
+  const [details, setDetails] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const contactId = member?.contactId || member?.id;
+
+  useEffect(() => {
+    if (!contactId?.startsWith('003')) {
+      setDetails(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const loadMemberDetails = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await fetchPortalApi('/api/household/member-details', {
+          getAuthToken,
+          method: 'POST',
+          body: { contactId },
+        });
+        if (!cancelled) {
+          setDetails(data.member || null);
+          if (data.sfData) {
+            await onSfDataUpdate?.(data.sfData);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message);
+          setDetails(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadMemberDetails();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contactId, getAuthToken]);
+
   const accountName = sfData?.account?.name || sfData?.profile?.accountName || 'Household';
+  const source = details || member || {};
   const data = {
-    name: member?.name || 'Member',
-    initials: getInitials(member?.name),
-    relationship: member?.role || 'Member',
-    role: member?.isPrimary ? 'Primary Member' : member?.isSecondary ? 'Secondary Member' : member?.role || 'Member',
-    roleDesc: member?.isPrimary
+    name: source.name || 'Member',
+    initials: getInitials(source.name),
+    relationship: source.role || 'Member',
+    role: source.isPrimary
+      ? 'Primary Member'
+      : source.isSecondary
+        ? 'Secondary Member'
+        : source.role || 'Member',
+    roleDesc: source.isPrimary
       ? 'Primary household member with full portal access.'
       : 'Active household member linked to this account.',
-    email: member?.email || sfData?.email || '—',
-    phone: member?.phone || sfData?.profile?.phone || '—',
-    address: [
-      sfData?.profile?.street,
-      [sfData?.profile?.city, sfData?.profile?.state, sfData?.profile?.postalCode].filter(Boolean).join(', '),
-      sfData?.profile?.country,
-    ].filter(Boolean).join(', ') || '—',
+    email: source.email || sfData?.email || '—',
+    phone: source.phone || sfData?.profile?.phone || '—',
+    address: formatAddress({
+      street: source.street || sfData?.profile?.street,
+      city: source.city || sfData?.profile?.city,
+      state: source.state || sfData?.profile?.state,
+      postalCode: source.postalCode || sfData?.profile?.postalCode,
+      country: source.country || sfData?.profile?.country,
+    }) || '—',
     since: sfData?.membership?.memberSince || sfData?.joinedDate || '—',
-    contactId: member?.contactId || '—',
+    contactId: source.contactId || contactId || '—',
   };
 
   return (
@@ -39,6 +102,13 @@ export default function MemberDetailsPage({ theme, member, sfData, onNavigate })
         { label: data.name },
       ]}
     >
+      {loading && (
+        <p className="section-panel-inner text-muted">Loading member details from Salesforce…</p>
+      )}
+      {error && (
+        <p className="section-panel-inner text-danger">{error}</p>
+      )}
+
       <div className="member-profile-card glass-panel">
         <div className="member-profile-avatar lg">{data.initials}</div>
         <div className="member-profile-info">

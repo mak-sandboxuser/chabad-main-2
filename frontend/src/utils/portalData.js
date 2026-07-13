@@ -36,21 +36,6 @@ export function formatDisplayDate(value) {
   return normalized;
 }
 
-export function getAccount(sfData) {
-  const profile = sfData?.profile || {};
-  return {
-    id: sfData?.accountId || sfData?.account?.id || '',
-    name: sfData?.account?.name || profile.accountName || sfData?.name || 'Household',
-    phone: sfData?.account?.phone || profile.phone || profile.mobile || '',
-    email: sfData?.account?.email || sfData?.email || '',
-    street: sfData?.account?.street || profile.street || '',
-    city: sfData?.account?.city || profile.city || '',
-    state: sfData?.account?.state || profile.state || '',
-    postalCode: sfData?.account?.postalCode || profile.postalCode || '',
-    country: sfData?.account?.country || profile.country || '',
-  };
-}
-
 export function getContacts(sfData) {
   if (sfData?.contacts?.length) {
     return sfData.contacts.map((contact) => ({
@@ -73,6 +58,40 @@ export function getContacts(sfData) {
     }];
   }
   return [];
+}
+
+export function getAccount(sfData) {
+  const profile = sfData?.profile || {};
+  return {
+    id: sfData?.accountId || sfData?.account?.id || '',
+    name: sfData?.account?.name || profile.accountName || sfData?.name || 'Household',
+    phone: sfData?.account?.phone || profile.phone || profile.mobile || '',
+    email: sfData?.account?.email || sfData?.email || '',
+    street: sfData?.account?.street || profile.street || '',
+    city: sfData?.account?.city || profile.city || '',
+    state: sfData?.account?.state || profile.state || '',
+    postalCode: sfData?.account?.postalCode || profile.postalCode || '',
+    country: sfData?.account?.country || profile.country || '',
+  };
+}
+
+export function getHouseholdAccountContext(sfData) {
+  const account = getAccount(sfData);
+  const contacts = getContacts(sfData);
+  const primaryContact = contacts.find((contact) => contact.isPrimary) || contacts[0] || null;
+  const secondaryContact = contacts.find((contact) => contact.isSecondary) || null;
+
+  return {
+    account,
+    householdAccountId: account.id,
+    accountName: account.name,
+    memberCount: contacts.length,
+    primaryContact,
+    secondaryContact,
+    householdContactIds: contacts
+      .map((contact) => contact.contactId || contact.id)
+      .filter((id) => typeof id === 'string' && id.startsWith('003')),
+  };
 }
 
 function normalizeContactRole(role = '') {

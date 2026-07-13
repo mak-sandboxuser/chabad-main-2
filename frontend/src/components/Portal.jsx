@@ -306,9 +306,18 @@ export default function Portal({ user, getAuthToken, onLogout }) {
             <HouseholdPage
               theme={theme}
               sfData={sfData}
+              user={user}
+              getAuthToken={getAuthToken}
               onNavigate={handleNavigate}
               onViewMember={handleViewMember}
               onDonate={() => setShowDonateModal(true)}
+              onHouseholdUpdated={async (nextSfData) => {
+                if (nextSfData) {
+                  setSfData(nextSfData);
+                } else {
+                  await fetchDashboardData();
+                }
+              }}
             />
           )}
 
@@ -317,7 +326,9 @@ export default function Portal({ user, getAuthToken, onLogout }) {
               theme={theme}
               member={selectedMember}
               sfData={sfData}
+              getAuthToken={getAuthToken}
               onNavigate={handleNavigate}
+              onSfDataUpdate={setSfData}
             />
           )}
 

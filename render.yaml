@@ -23,11 +23,19 @@ services:
         sync: false
       - key: MAKE_PORTAL_DATA_WEBHOOK_URL
         sync: false
+      - key: MAKE_HOUSEHOLD_DATA_WEBHOOK_URL
+        sync: false
       - key: MAKE_PAYMENTS_WEBHOOK_URL
         sync: false
       - key: MAKE_QUICK_PAYMENT_WEBHOOK_URL
         sync: false
       - key: MAKE_STRIPE_PAYMENT_WEBHOOK_URL
+        sync: false
+      - key: MAKE_HOUSEHOLD_SEARCH_CONTACTS_WEBHOOK_URL
+        sync: false
+      - key: MAKE_ADD_FAMILY_MEMBER_WEBHOOK_URL
+        sync: false
+      - key: MAKE_HOUSEHOLD_ROLE_WEBHOOK_URL
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
