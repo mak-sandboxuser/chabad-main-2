@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { User, Pencil, X, Save, MapPin, Heart, Calendar } from 'lucide-react';
+import { User, Pencil, X, Save, MapPin, Heart } from 'lucide-react';
 import { showToast } from '../../utils/toast';
 import { fetchPortalApi } from '../../utils/portalApi';
 import {
@@ -16,15 +16,13 @@ import {
 const PROFILE_TABS = [
   { id: 'general', label: 'General Details', icon: User },
   { id: 'address', label: 'Address Details', icon: MapPin },
-  { id: 'lifecycle', label: 'Lifecycle & Status', icon: Heart },
-  { id: 'additional', label: 'Additional Information', icon: Calendar },
+  { id: 'personal', label: 'Personal Information', icon: Heart },
 ];
 
 const TAB_FIELD_KEYS = {
   general: ['firstName', 'lastName', 'title', 'nickname', 'phone', 'homePhone'],
   address: ['street', 'city', 'state', 'postalCode', 'country'],
-  lifecycle: LIFECYCLE_FIELD_KEYS,
-  additional: ADDITIONAL_FIELD_KEYS,
+  personal: [...LIFECYCLE_FIELD_KEYS, ...ADDITIONAL_FIELD_KEYS],
 };
 
 function FieldRow({ label, value, fieldKey, editing, fullWidth, children }) {
@@ -220,8 +218,10 @@ export default function ProfilePage({
         </FieldRow>
       </>
     ),
-    lifecycle: LIFECYCLE_FIELD_KEYS.map(renderLifecycleField),
-    additional: ADDITIONAL_FIELD_KEYS.map(renderAdditionalField),
+    personal: [
+      ...LIFECYCLE_FIELD_KEYS.map(renderLifecycleField),
+      ...ADDITIONAL_FIELD_KEYS.map(renderAdditionalField),
+    ],
   };
 
   const currentTab = PROFILE_TABS.find((tab) => tab.id === activeTab);
