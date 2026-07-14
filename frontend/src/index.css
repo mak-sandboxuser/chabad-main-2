@@ -618,6 +618,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .light-theme .building-sketch--login {
   opacity: 0.92;
+  filter: invert(1);
 }
 
 :not(.light-theme) .building-sketch--login {
@@ -633,6 +634,7 @@ h1, h2, h3, h4, h5, h6 {
 .light-theme .building-sketch {
   opacity: 0.78;
   max-width: 540px;
+  filter: invert(1);
 }
 
 /* Hide the dark bottom vignette overlay in light theme for a bright layout */
@@ -652,7 +654,7 @@ h1, h2, h3, h4, h5, h6 {
 .login-card-wrapper {
   width: 100%;
   max-width: 460px;
-  padding: 30px 34px 26px;
+  padding: 24px 30px 20px;
   border-radius: 22px;
   border: 1px solid var(--border-color);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
@@ -692,7 +694,7 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-secondary);
   text-align: center;
   line-height: 1.5;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .auth-error-box {
@@ -732,14 +734,14 @@ h1, h2, h3, h4, h5, h6 {
 
 .input-field-icon {
   position: absolute;
-  left: 16px;
+  left: 14px;
   color: var(--text-muted);
   pointer-events: none;
 }
 
 .input-field-element {
   width: 100%;
-  padding: 14px 16px 14px 48px;
+  padding: 11px 16px 11px 42px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
   background: rgba(255, 255, 255, 0.04);
@@ -773,7 +775,7 @@ h1, h2, h3, h4, h5, h6 {
 /* Submit Button */
 .submit-continue-btn {
   width: 100%;
-  padding: 14px;
+  padding: 11px;
   border-radius: 10px;
   border: none;
   font-family: var(--font-body);
@@ -830,7 +832,7 @@ h1, h2, h3, h4, h5, h6 {
 .card-divider-line {
   display: flex;
   align-items: center;
-  margin: 14px 0;
+  margin: 10px 0;
 }
 
 .card-divider-line::before, .card-divider-line::after {
@@ -849,7 +851,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .support-link-btn {
   width: 100%;
-  padding: 12px;
+  padding: 10px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
   background: transparent;
@@ -878,7 +880,7 @@ h1, h2, h3, h4, h5, h6 {
   gap: 6px;
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 /* Success State Panel */
@@ -1347,6 +1349,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .light-theme .sidebar-sketch-bg {
   opacity: 0.32;
+  filter: invert(1);
 }
 
 .sidebar-help-card {
@@ -1614,6 +1617,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .light-theme .dash-welcome-sketch {
   opacity: 0.62;
+  filter: invert(1);
 }
 
 .dash-stat-row {
@@ -2394,6 +2398,10 @@ h1, h2, h3, h4, h5, h6 {
   width: min(360px, 50%);
   opacity: 0.5;
   pointer-events: none;
+}
+
+.light-theme .portal-page-hero-sketch {
+  filter: invert(1);
 }
 
 .portal-page-meta-bar {
