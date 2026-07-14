@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Home, Users, User, Phone, Mail, MapPin, Lock, UserPlus,
+  Home, Users, Phone, Mail, MapPin, Lock, UserPlus,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
 import SectionTabs from '../shared/SectionTabs';
 import ContactsTable from '../shared/ContactsTable';
-import RelationshipsTable from '../shared/RelationshipsTable';
 import AddFamilyMemberModal from '../shared/AddFamilyMemberModal';
 import { fetchPortalApi } from '../../utils/portalApi';
 import {
@@ -13,13 +12,11 @@ import {
   getAccount,
   getContacts,
   getHouseholdAccountContext,
-  getRelationships,
 } from '../../utils/portalData';
 
 const TABS = [
-  { id: 'profile', label: 'Profile', icon: Home },
-  { id: 'contacts', label: 'Contacts', icon: Users },
-  { id: 'relationships', label: 'Relationships', icon: User },
+  { id: 'profile', label: 'Household Profile', icon: Home },
+  { id: 'contacts', label: 'Household Members', icon: Users },
 ];
 
 export default function HouseholdPage({
@@ -71,7 +68,6 @@ export default function HouseholdPage({
 
   const account = getAccount(sfData);
   const contacts = getContacts(sfData);
-  const relationships = getRelationships(sfData);
   const household = getHouseholdAccountContext(sfData);
   const { primaryContact, secondaryContact, memberCount } = household;
 
@@ -90,7 +86,7 @@ export default function HouseholdPage({
         <div className="account-header-main">
           <div className="account-header-icon"><Home size={24} /></div>
           <div>
-            <span className="account-header-type">Account</span>
+            <span className="account-header-type">Household Account</span>
             <h2>{account.name}</h2>
             <div className="account-header-meta">
               {account.phone && <span><Phone size={14} /> {account.phone}</span>}
@@ -131,7 +127,7 @@ export default function HouseholdPage({
                 <div className="profile-field-box">{account.phone || '—'}</div>
               </div>
               <div className="profile-field profile-field--full">
-                <label className="profile-field-label">Shipping Address</label>
+                <label className="profile-field-label">Address</label>
                 <div className="profile-field-box">{formatAddress(account)}</div>
               </div>
               <div className="profile-field">
@@ -155,10 +151,6 @@ export default function HouseholdPage({
 
           {activeTab === 'contacts' && (
             <ContactsTable contacts={contacts} onSelectContact={onViewMember} />
-          )}
-
-          {activeTab === 'relationships' && (
-            <RelationshipsTable relationships={relationships} />
           )}
         </div>
       </div>

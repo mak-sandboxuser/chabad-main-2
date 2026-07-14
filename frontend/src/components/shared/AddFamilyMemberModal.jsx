@@ -297,7 +297,7 @@ export default function AddFamilyMemberModal({
   const renderParentRulesBanner = (availability) => (
     <div className="add-family-rules-banner">
       <p>
-        <strong>Parent rules:</strong> Each account can have only one Primary and one Secondary parent.
+        <strong>Parent rules:</strong>
         {parentCapacity.parentsFull
           ? ' Both parent slots are already filled — add new members as Child only.'
           : !parentCapacity.canAddPrimary && parentCapacity.canAddSecondary

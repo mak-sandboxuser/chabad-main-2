@@ -48,7 +48,6 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
           <div>
             <span className="account-header-type">Financials</span>
             <h2>{account.name}</h2>
-            <p className="account-header-subcopy">Synced from ChabadOne CRM financial records.</p>
           </div>
         </div>
         <div className="account-header-actions">

@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Wallet, Calendar, Lock, Heart, RefreshCw, CreditCard,
+  Wallet, Calendar, Lock, Heart, RefreshCw,
   User, Mail, Phone, MapPin, ChevronRight, ShieldCheck,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
@@ -87,20 +87,18 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
           </div>
           <table className="members-table dash-table">
             <thead>
-              <tr><th>Date</th><th>Description</th><th>Amount</th><th>Payment Method</th><th>Status</th></tr>
+              <tr><th>Date</th><th>Amount</th><th>Status</th></tr>
             </thead>
             <tbody>
               {payments.length ? payments.slice(0, 5).map((p, i) => (
                 <tr key={p.id || i}>
                   <td>{formatDisplayDate(p.date)}</td>
-                  <td>{p.type || p.subType || 'Donation'}</td>
                   <td>{p.amount}</td>
-                  <td>{p.method || 'Cash'}</td>
                   <td><span className="badge badge-active">{p.status || 'Paid'}</span></td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={5} className="portal-empty-table">No payments on file.</td>
+                  <td colSpan={3} className="portal-empty-table">No payments on file.</td>
                 </tr>
               )}
             </tbody>
@@ -127,17 +125,6 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
           </div>
 
           <div className="dash-panel glass-panel">
-            <h3>Payment Method</h3>
-            <div className="payment-method-row">
-              <CreditCard size={18} />
-              <div>
-                <strong>{membership.paymentMethod}</strong>
-                <span className="badge badge-active">Primary</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="dash-panel glass-panel">
             <div className="dash-panel-header">
               <h3>Billing Contact</h3>
             </div>
@@ -160,9 +147,7 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
           </div>
           <div className="financial-info-row"><span>Next Charge</span><strong>{formatDisplayDate(recurring?.nextDate)}</strong></div>
           <div className="financial-info-row"><span>Status</span><span className="badge badge-active">{recurring?.status || 'Inactive'}</span></div>
-          <button type="button" className="dash-btn-outline full-width" onClick={() => onNavigate('recurring')}>
-            Manage Billing <ChevronRight size={14} />
-          </button>
+
         </div>
       </div>
     </PortalPageLayout>

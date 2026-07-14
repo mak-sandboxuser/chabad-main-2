@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Search, RefreshCw, SlidersHorizontal, ChevronDown, Check, User } from 'lucide-react';
+import { Search, ChevronDown, Check, User } from 'lucide-react';
 
 function MemberFlag({ active }) {
   return (
@@ -46,12 +46,6 @@ export default function ContactsTable({ contacts = [], onSelectContact }) {
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
-          <button type="button" className="crm-icon-btn" title="Refresh" onClick={() => setSearch('')}>
-            <RefreshCw size={16} />
-          </button>
-          <button type="button" className="crm-icon-btn" title="Filters">
-            <SlidersHorizontal size={16} />
-          </button>
         </div>
       </div>
 

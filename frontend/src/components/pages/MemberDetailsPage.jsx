@@ -165,14 +165,6 @@ export default function MemberDetailsPage({
         })}
       </div>
 
-      <div className="member-danger-card glass-panel">
-        <div className="member-danger-icon"><Trash2 size={20} /></div>
-        <div>
-          <strong className="text-danger">Remove from Household</strong>
-          <p>This will remove {data.name} from the {accountName} household.</p>
-        </div>
-        <button type="button" className="btn-danger-outline">Remove Member</button>
-      </div>
     </PortalPageLayout>
   );
 }
