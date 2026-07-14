@@ -26,7 +26,7 @@ import {
 
 const QUICK_ACTIONS = [
   { label: 'Make Payment', icon: CreditCard, tab: 'payments' },
-  { label: 'Manage Billing', icon: Landmark, tab: 'recurring' },
+
   { label: 'Update Profile', icon: User, tab: 'profile' },
   { label: 'View Household', icon: Home, tab: 'household' },
   { label: 'View Membership Details', icon: ShieldCheck, tab: 'membership' },
@@ -141,9 +141,7 @@ export default function DashboardHome({
             {activeRecurring?.frequency && (
               <span className="dash-schedule-badge">{activeRecurring.frequency}</span>
             )}
-            <button type="button" className="dash-btn-outline" onClick={() => onNavigate('recurring')}>
-              Manage Billing
-            </button>
+
           </div>
         </div>
 
