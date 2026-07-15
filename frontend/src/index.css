@@ -1896,7 +1896,8 @@ h1, h2, h3, h4, h5, h6 {
 .dash-progress-ring-stats {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 40px;
+  margin-left: 50px;
 }
 
 .dash-progress-ring-stat {
