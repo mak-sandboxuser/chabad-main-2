@@ -11,18 +11,17 @@ import {
   Landmark,
   Bell,
   Calendar,
+  DollarSign,
+  Megaphone,
 } from 'lucide-react';
 import BuildingSketch from './shared/BuildingSketch';
 import {
   formatDisplayDate,
   formatMoney,
-  getAccount,
-  getContacts,
   getFinancialSummary,
   getMembership,
   getPayments,
   getRecurring,
-  sumPaymentsTotal,
 } from '../utils/portalData';
 
 const QUICK_ACTIONS = [
@@ -36,11 +35,24 @@ const QUICK_ACTIONS = [
 const PROGRESS_RING_RADIUS = 52;
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_RADIUS;
 
+const ANNOUNCEMENT = {
+  title: 'High Holidays are approaching',
+  body: "We're preparing for a meaningful High Holidays together. Stay tuned for updates and special programs.",
+  tab: 'membership',
+};
+
 function getTimeOfDayGreeting() {
   const hour = new Date().getHours();
   if (hour < 12) return 'Good Morning';
   if (hour < 18) return 'Good Afternoon';
   return 'Good Evening';
+}
+
+function getTransactionIcon(row) {
+  const label = `${row.subType || ''} ${row.type || ''} ${row.method || ''}`.toLowerCase();
+  if (label.includes('building') || label.includes('bank')) return Landmark;
+  if (label.includes('monthly') || label.includes('recurring')) return Calendar;
+  return DollarSign;
 }
 
 export default function DashboardHome({
@@ -56,13 +68,10 @@ export default function DashboardHome({
     user?.email?.split('@')[0] ||
     'Member';
 
-  const account = getAccount(sfData);
-  const contacts = getContacts(sfData);
   const membership = getMembership(sfData);
   const summary = getFinancialSummary(sfData);
   const payments = getPayments(sfData);
   const recentPayments = payments.slice(0, 4);
-  const totalContributed = formatMoney(summary.totalContributed || summary.contributed);
   const activeRecurring = getRecurring(sfData).find(
     (item) => ['active', 'finished', 'open'].includes((item.status || '').toLowerCase()),
   ) || getRecurring(sfData)[0];
@@ -111,75 +120,24 @@ export default function DashboardHome({
           <BuildingSketch theme={theme} className="dash-welcome-sketch" />
         </div>
 
-        <div className="dash-stat-row">
-          <button type="button" className="dash-stat-card glass-panel" onClick={() => onNavigate('membership')}>
-            <div>
-              <span className="dash-stat-label">Membership Tier</span>
-              <strong>{membership.tier || '—'}</strong>
-              <small>{membership.notes || '—'}</small>
-            </div>
-            <div className="dash-stat-icon gold"><Crown size={20} /></div>
-            <ChevronRight size={16} className="dash-stat-chevron" />
-          </button>
-          <button type="button" className="dash-stat-card glass-panel" onClick={() => onNavigate('membership')}>
-            <div>
-              <span className="dash-stat-label">Membership Status</span>
-              <strong className="text-success">{membership.status || '—'}</strong>
-              <small>
-                {membership.memberSince
-                  ? `Member since ${formatDisplayDate(membership.memberSince)}`
-                  : 'Member since —'}
-              </small>
-            </div>
-            <div className="dash-stat-icon green"><ShieldCheck size={20} /></div>
-            <ChevronRight size={16} className="dash-stat-chevron" />
-          </button>
-          <button type="button" className="dash-stat-card glass-panel" onClick={() => onNavigate('financial')}>
-            <div>
-              <span className="dash-stat-label">Total Contributions</span>
-              <strong>{totalContributed}</strong>
-              <small>{summary.paymentCount ? `${summary.paymentCount} payments on file` : 'No payments yet'}</small>
-            </div>
-            <div className="dash-stat-icon blue"><FileText size={20} /></div>
-            <ChevronRight size={16} className="dash-stat-chevron" />
-          </button>
-          <button type="button" className="dash-stat-card glass-panel" onClick={() => onNavigate('household')}>
-            <div>
-              <span className="dash-stat-label">Household</span>
-              <strong>{account.name || '—'}</strong>
-              <small>{contacts.length ? `${contacts.length} Members` : 'No members on file'}</small>
-            </div>
-            <div className="dash-stat-icon purple"><Users size={20} /></div>
-            <ChevronRight size={16} className="dash-stat-chevron" />
-          </button>
-        </div>
-
-        <div className="dash-contribution-card glass-panel">
-          <div className="dash-contribution-col">
-            <span className="dash-stat-label">Total Contributed (YTD)</span>
-            <strong className="dash-contribution-amount text-success">
-              {summary.contributedYtd || totalContributed || '$0.00'}
-            </strong>
-            <small>{summary.paymentCount ? `${summary.paymentCount} cash payments synced from CRM` : 'of $0.00 commitment'}</small>
-          </div>
-          <div className="dash-contribution-col">
+        <div className="dash-balance-row">
+          <div className="dash-balance-card glass-panel">
+            <div className="dash-balance-icon red"><DollarSign size={20} /></div>
             <span className="dash-stat-label">Outstanding Balance</span>
-            <strong className="dash-contribution-amount text-danger">
-              {formatMoney(summary.outstanding)}
-            </strong>
-            <small>{membership.annualCommitment !== '$0.00' ? `of ${membership.annualCommitment || '$0.00'} commitment` : 'No outstanding balance'}</small>
+            <strong className="dash-balance-amount text-danger">{formatMoney(summary.outstanding)}</strong>
+            <small>{activeRecurring?.nextDate ? `Due on ${formatDisplayDate(activeRecurring.nextDate)}` : 'No due date scheduled'}</small>
             <button type="button" className="dash-btn-gold" onClick={onDonate}>
-              Make Payment
+              Make a Payment
             </button>
           </div>
-          <div className="dash-contribution-col">
-            <span className="dash-stat-label">Next Scheduled Contribution</span>
-            <strong className="dash-contribution-amount">{activeRecurring?.amount || '—'}</strong>
-            <small>{activeRecurring?.nextDate ? formatDisplayDate(activeRecurring.nextDate) : 'No scheduled billing'}</small>
+          <div className="dash-balance-card glass-panel">
+            <div className="dash-balance-icon blue"><Calendar size={20} /></div>
+            <span className="dash-stat-label">Next Payment</span>
+            <strong className="dash-balance-amount">{activeRecurring?.amount || '—'}</strong>
+            <small>{activeRecurring?.nextDate ? `Due on ${formatDisplayDate(activeRecurring.nextDate)}` : 'No scheduled billing'}</small>
             {activeRecurring?.frequency && (
-              <span className="dash-schedule-badge">{activeRecurring.frequency}</span>
+              <span className="dash-schedule-badge blue">{activeRecurring.frequency}</span>
             )}
-
           </div>
         </div>
 
@@ -228,7 +186,7 @@ export default function DashboardHome({
           </div>
         </div>
 
-        <div className="dash-split-row dash-split-row-3">
+        <div className="dash-split-row">
           <div className="dash-panel glass-panel">
             <div className="dash-panel-header">
               <h3>Upcoming</h3>
@@ -251,72 +209,54 @@ export default function DashboardHome({
             ) : (
               <div className="portal-empty-table">Nothing upcoming.</div>
             )}
-          </div>
-
-          <div className="dash-panel glass-panel">
-            <div className="dash-panel-header">
-              <h3>Recent Payments</h3>
-            </div>
-            <div className="table-wrapper">
-              <table className="members-table dash-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentPayments.length ? recentPayments.map((row, i) => (
-                    <tr key={row.id || i}>
-                      <td>{formatDisplayDate(row.date)}</td>
-                      <td>{row.method || row.type || '—'}</td>
-                      <td>{row.amount || '—'}</td>
-                      <td><span className="badge badge-active">{row.status || '—'}</span></td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan={4} className="portal-empty-table">No payments on file.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
             <button type="button" className="dash-view-all" onClick={() => onNavigate('payments')}>
-              View all payments
+              View all upcoming
             </button>
           </div>
 
           <div className="dash-panel glass-panel">
             <div className="dash-panel-header">
-              <h3>Household Summary</h3>
+              <h3>Recent Transactions</h3>
             </div>
-            {contacts.length ? (
-              <ul className="dash-household-list">
-                {contacts.map((person) => {
-                  const initials = person.name?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
-                  const tag = person.isPrimary ? 'Owner' : 'Member';
-                  const tagClass = person.isPrimary ? 'owner' : 'member';
+            {recentPayments.length ? (
+              <ul className="dash-transaction-list">
+                {recentPayments.map((row, i) => {
+                  const Icon = getTransactionIcon(row);
                   return (
-                    <li key={person.id || person.contactId || person.name} className="dash-household-item">
-                      <div className="dash-household-avatar">{initials}</div>
-                      <div className="dash-household-info">
-                        <strong>{person.name}</strong>
-                        <span>{person.role}</span>
+                    <li key={row.id || i} className="dash-transaction-item">
+                      <div className="dash-transaction-icon">
+                        <Icon size={16} />
                       </div>
-                      <span className={`dash-role-tag ${tagClass}`}>{tag}</span>
+                      <div className="dash-transaction-info">
+                        <strong>{row.subType || row.type || 'Contribution'}</strong>
+                        <span>{formatDisplayDate(row.date)}{row.method ? ` • ${row.method}` : ''}</span>
+                      </div>
+                      <div className="dash-transaction-amount-col">
+                        <strong>{row.amount || '—'}</strong>
+                        <span className="badge badge-active">{row.status || 'Paid'}</span>
+                      </div>
                     </li>
                   );
                 })}
               </ul>
             ) : (
-              <div className="portal-empty-table">No household members on file.</div>
+              <div className="portal-empty-table">No payments on file.</div>
             )}
-            <button type="button" className="dash-view-all" onClick={() => onNavigate('household')}>
-              View all members
+            <button type="button" className="dash-view-all" onClick={() => onNavigate('payments')}>
+              View all transactions
             </button>
           </div>
+        </div>
+
+        <div className="dash-banner glass-panel">
+          <div className="dash-banner-icon"><Megaphone size={22} /></div>
+          <div className="dash-banner-text">
+            <strong>{ANNOUNCEMENT.title}</strong>
+            <p>{ANNOUNCEMENT.body}</p>
+          </div>
+          <button type="button" className="dash-btn-outline" onClick={() => onNavigate(ANNOUNCEMENT.tab)}>
+            Learn More
+          </button>
         </div>
       </div>
 

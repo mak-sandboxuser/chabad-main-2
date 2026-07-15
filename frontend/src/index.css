@@ -1701,6 +1701,39 @@ h1, h2, h3, h4, h5, h6 {
 .text-success { color: #10b981 !important; }
 .text-danger { color: #ef4444 !important; }
 
+.dash-balance-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.dash-balance-card {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dash-balance-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.dash-balance-icon.red { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+.dash-balance-icon.blue { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
+
+.dash-balance-amount {
+  font-size: 26px;
+  font-weight: 700;
+  font-family: var(--font-heading);
+  margin-top: 4px;
+}
+
 .dash-contribution-card {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1894,10 +1927,6 @@ h1, h2, h3, h4, h5, h6 {
   gap: 20px;
 }
 
-.dash-split-row-3 {
-  grid-template-columns: repeat(3, 1fr);
-}
-
 .dash-panel {
   padding: 20px;
 }
@@ -1983,6 +2012,108 @@ h1, h2, h3, h4, h5, h6 {
 .dash-upcoming-info span {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.dash-transaction-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-transaction-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dash-transaction-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dash-transaction-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.dash-transaction-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-transaction-info strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.dash-transaction-info span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dash-transaction-amount-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dash-transaction-amount-col strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.dash-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(200, 148, 63, 0.1), rgba(200, 148, 63, 0.04));
+  border: 1px solid rgba(200, 148, 63, 0.2);
+}
+
+.dash-banner-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(200, 148, 63, 0.15);
+  color: #c8943f;
+}
+
+.dash-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dash-banner-text strong {
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.dash-banner-text p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 .dash-household-list {
@@ -2210,10 +2341,6 @@ h1, h2, h3, h4, h5, h6 {
     grid-template-columns: 1fr;
   }
 
-  .dash-split-row-3 {
-    grid-template-columns: 1fr 1fr;
-  }
-
   .dash-progress-ring-row {
     flex-wrap: wrap;
     gap: 20px;
@@ -2222,8 +2349,13 @@ h1, h2, h3, h4, h5, h6 {
 
 @media (max-width: 768px) {
   .dash-stat-row,
-  .dash-split-row {
+  .dash-split-row,
+  .dash-balance-row {
     grid-template-columns: 1fr;
+  }
+
+  .dash-banner {
+    flex-wrap: wrap;
   }
 
   .dash-welcome-text {
