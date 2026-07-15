@@ -366,7 +366,7 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.32fr) minmax(0, 0.68fr);
-  padding: 0 48px;
+  padding: 0 80px;
   gap: 32px;
   position: relative;
   align-items: center;
