@@ -1712,13 +1712,17 @@ h1, h2, h3, h4, h5, h6 {
   padding: 20px;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 4px;
+  text-align: center;
 }
 
 .dash-balance-header {
   display: flex;
   align-items: center;
+  align-self: stretch;
   gap: 10px;
+  text-align: left;
 }
 
 .dash-balance-header .dash-stat-label {
@@ -1743,6 +1747,11 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   font-family: var(--font-heading);
   margin-top: 4px;
+}
+
+.dash-balance-card .dash-btn-gold,
+.dash-balance-card .dash-schedule-badge {
+  align-self: center;
 }
 
 .dash-contribution-card {
@@ -1837,6 +1846,7 @@ h1, h2, h3, h4, h5, h6 {
 .dash-progress-ring-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 32px;
   margin-bottom: 16px;
 }
@@ -1926,7 +1936,8 @@ h1, h2, h3, h4, h5, h6 {
 .dash-progress-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 16px;
   margin-top: 8px;
   font-size: 11px;
   color: var(--text-muted);
