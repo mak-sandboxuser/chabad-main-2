@@ -213,7 +213,7 @@ export default function DashboardHome({
         </div>
       </div>
 
-      <aside className="member-dashboard-rail">
+      {/* <aside className="member-dashboard-rail">
         <div className="dash-rail-card glass-panel">
           <div className="dash-panel-header">
             <h3>Notifications</h3>
@@ -238,7 +238,7 @@ export default function DashboardHome({
             ))}
           </ul>
         </div>
-      </aside>
+      </aside> */}
     </div>
   );
 }
