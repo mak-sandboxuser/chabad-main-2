@@ -13,6 +13,7 @@ import {
   Calendar,
   DollarSign,
   Megaphone,
+  Gift,
 } from 'lucide-react';
 import BuildingSketch from './shared/BuildingSketch';
 import {
@@ -39,6 +40,16 @@ const ANNOUNCEMENT = {
   title: 'High Holidays are approaching',
   body: "We're preparing for a meaningful High Holidays together. Stay tuned for updates and special programs.",
   tab: 'membership',
+};
+
+// Static placeholder, not sourced from CRM data — update the date/label each season.
+const UPCOMING_CAMPAIGN = {
+  id: 'campaign',
+  icon: Gift,
+  date: '2026-09-01',
+  label: 'High Holidays Campaign',
+  badge: 'Upcoming',
+  badgeClass: 'purple',
 };
 
 function getTimeOfDayGreeting() {
@@ -97,6 +108,7 @@ export default function DashboardHome({
       badgeClass: 'green',
     });
   }
+  upcomingItems.push(UPCOMING_CAMPAIGN);
 
   return (
     <div className="member-dashboard">
@@ -195,7 +207,7 @@ export default function DashboardHome({
               <ul className="dash-upcoming-list">
                 {upcomingItems.map((item) => (
                   <li key={item.id} className="dash-upcoming-item">
-                    <div className="dash-upcoming-icon">
+                    <div className={`dash-upcoming-icon ${item.badgeClass || 'blue'}`}>
                       <item.icon size={16} />
                     </div>
                     <div className="dash-upcoming-info">

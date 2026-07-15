@@ -1767,7 +1767,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .dash-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #c8943f, #e0b060);
+  background: var(--text-primary);
   border-radius: 999px;
 }
 
@@ -1855,7 +1855,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .dash-progress-ring-fill {
   fill: none;
-  stroke: #c8943f;
+  stroke: var(--text-primary);
   stroke-width: 10;
   stroke-linecap: round;
   transition: stroke-dashoffset 0.4s ease;
@@ -1996,6 +1996,10 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(200, 148, 63, 0.15);
   color: #c8943f;
 }
+
+.dash-upcoming-icon.blue { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
+.dash-upcoming-icon.green { background: rgba(16, 185, 129, 0.12); color: #10b981; }
+.dash-upcoming-icon.purple { background: rgba(139, 92, 246, 0.12); color: #8b5cf6; }
 
 .dash-upcoming-info {
   display: flex;
