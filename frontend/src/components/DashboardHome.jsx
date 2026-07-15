@@ -134,8 +134,10 @@ export default function DashboardHome({
 
         <div className="dash-balance-row">
           <div className="dash-balance-card glass-panel">
-            <div className="dash-balance-icon red"><DollarSign size={20} /></div>
-            <span className="dash-stat-label">Outstanding Balance</span>
+            <div className="dash-balance-header">
+              <div className="dash-balance-icon red"><DollarSign size={16} /></div>
+              <span className="dash-stat-label">Outstanding Balance</span>
+            </div>
             <strong className="dash-balance-amount text-danger">{formatMoney(summary.outstanding)}</strong>
             <small>{activeRecurring?.nextDate ? `Due on ${formatDisplayDate(activeRecurring.nextDate)}` : 'No due date scheduled'}</small>
             <button type="button" className="dash-btn-gold" onClick={onDonate}>
@@ -143,8 +145,10 @@ export default function DashboardHome({
             </button>
           </div>
           <div className="dash-balance-card glass-panel">
-            <div className="dash-balance-icon blue"><Calendar size={20} /></div>
-            <span className="dash-stat-label">Next Payment</span>
+            <div className="dash-balance-header">
+              <div className="dash-balance-icon blue"><Calendar size={16} /></div>
+              <span className="dash-stat-label">Next Payment</span>
+            </div>
             <strong className="dash-balance-amount">{activeRecurring?.amount || '—'}</strong>
             <small>{activeRecurring?.nextDate ? `Due on ${formatDisplayDate(activeRecurring.nextDate)}` : 'No scheduled billing'}</small>
             {activeRecurring?.frequency && (
