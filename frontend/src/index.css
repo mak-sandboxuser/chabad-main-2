@@ -1743,6 +1743,11 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   font-family: var(--font-heading);
   margin-top: 4px;
+  margin-left: 40px;
+}
+
+.fkchange {
+  margin-left: 40px;
 }
 
 .dash-contribution-card {
@@ -1789,7 +1794,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .dash-btn-gold {
   margin-top: 10px;
-  padding: 10px 16px;
+  padding: 10px 50px;
   border: none;
   border-radius: 8px;
   background: linear-gradient(135deg, #c8943f, #b07d32);

@@ -139,7 +139,7 @@ export default function DashboardHome({
               <span className="dash-stat-label">Outstanding Balance</span>
             </div>
             <strong className="dash-balance-amount text-danger">{formatMoney(summary.outstanding)}</strong>
-            <small>{activeRecurring?.nextDate ? `Due on ${formatDisplayDate(activeRecurring.nextDate)}` : 'No due date scheduled'}</small>
+            <small className='fkchange'>{activeRecurring?.nextDate ? `Due on ${formatDisplayDate(activeRecurring.nextDate)}` : 'No due date scheduled'}</small>
             <button type="button" className="dash-btn-gold" onClick={onDonate}>
               Make a Payment
             </button>
@@ -150,7 +150,7 @@ export default function DashboardHome({
               <span className="dash-stat-label">Next Payment</span>
             </div>
             <strong className="dash-balance-amount">{activeRecurring?.amount || '—'}</strong>
-            <small>{activeRecurring?.nextDate ? `Due on ${formatDisplayDate(activeRecurring.nextDate)}` : 'No scheduled billing'}</small>
+            <small className='fkchange'>{activeRecurring?.nextDate ? `Due on ${formatDisplayDate(activeRecurring.nextDate)}` : 'No scheduled billing'}</small>
             {activeRecurring?.frequency && (
               <span className="dash-schedule-badge blue">{activeRecurring.frequency}</span>
             )}
