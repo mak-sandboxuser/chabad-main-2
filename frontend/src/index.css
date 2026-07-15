@@ -366,7 +366,7 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.32fr) minmax(0, 0.68fr);
-  padding: 0 150px;
+  padding: 0 120px;
   gap: 10px;
   position: relative;
   align-items: center;
@@ -995,7 +995,7 @@ h1, h2, h3, h4, h5, h6 {
   }
 
   .chabad-header {
-    padding: 0 32px;
+    padding: 0 120px;
   }
   
   .chabad-main-content {
