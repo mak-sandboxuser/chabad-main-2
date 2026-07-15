@@ -907,7 +907,7 @@ h1, h2, h3, h4, h5, h6 {
 /* Footer Section */
 .chabad-footer {
   flex-shrink: 0;
-  padding: 0 48px 16px;
+  padding: 20px 90px;
   display: flex;
   flex-direction: column;
   gap: 10px;
