@@ -1616,6 +1616,22 @@ h1, h2, h3, h4, h5, h6 {
   opacity: 0.62;
 }
 
+.dash-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.dash-status-since {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .dash-stat-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1769,10 +1785,117 @@ h1, h2, h3, h4, h5, h6 {
   width: fit-content;
 }
 
+.dash-schedule-badge.green {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.dash-progress-ring-row {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  margin-bottom: 16px;
+}
+
+.dash-progress-ring-wrap {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+}
+
+.dash-progress-ring {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.dash-progress-ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 10;
+}
+
+.light-theme .dash-progress-ring-track {
+  stroke: rgba(0, 27, 61, 0.08);
+}
+
+.dash-progress-ring-fill {
+  fill: none;
+  stroke: #c8943f;
+  stroke-width: 10;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.4s ease;
+}
+
+.dash-progress-ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.dash-progress-ring-label strong {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dash-progress-ring-label span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dash-progress-ring-stats {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.dash-progress-ring-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dash-progress-ring-stat strong {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--font-heading);
+  color: var(--text-primary);
+}
+
+.dash-progress-ring-stat span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dash-progress-ring-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border-color);
+}
+
+.dash-progress-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .dash-split-row {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: 20px;
+}
+
+.dash-split-row-3 {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .dash-panel {
@@ -1811,6 +1934,55 @@ h1, h2, h3, h4, h5, h6 {
 
 .dash-view-all:hover {
   text-decoration: underline;
+}
+
+.dash-upcoming-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-upcoming-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dash-upcoming-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dash-upcoming-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: rgba(200, 148, 63, 0.15);
+  color: #c8943f;
+}
+
+.dash-upcoming-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-upcoming-info strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.dash-upcoming-info span {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .dash-household-list {
@@ -2036,6 +2208,15 @@ h1, h2, h3, h4, h5, h6 {
 
   .dash-contribution-card {
     grid-template-columns: 1fr;
+  }
+
+  .dash-split-row-3 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dash-progress-ring-row {
+    flex-wrap: wrap;
+    gap: 20px;
   }
 }
 
