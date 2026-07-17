@@ -52,7 +52,7 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
         </div>
         <div className="account-header-actions">
           <button type="button" className="dash-btn-gold" onClick={onDonate}>
-            <Lock size={16} /> Quick Payment
+            <Lock size={16} /> Outstanding Amount
           </button>
         </div>
       </div>
@@ -87,10 +87,6 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
                 { key: 'total', label: 'Total', render: (row) => row.total || row.amount },
                 { key: 'date', label: 'Payment Date', render: (row) => formatDisplayDate(row.date) },
                 { key: 'outstanding', label: 'Outstanding', render: (row) => row.outstanding || '$0.00' },
-                { key: 'payer', label: 'Payer / Parent' },
-                { key: 'type', label: 'Type' },
-                { key: 'subType', label: 'Sub-Type' },
-                { key: 'method', label: 'Payment Method' },
               ]}
             />
           )}
@@ -106,9 +102,6 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
                 { key: 'total', label: 'Total' },
                 { key: 'paid', label: 'Paid' },
                 { key: 'name', label: 'Pledge' },
-                { key: 'parent', label: 'Parent Account' },
-                { key: 'type', label: 'Type' },
-                { key: 'subType', label: 'Sub-Type' },
                 { key: 'date', label: 'Date', render: (row) => formatDisplayDate(row.date) },
               ]}
             />
@@ -123,7 +116,6 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
                 { key: 'amount', label: 'Amount' },
                 { key: 'frequency', label: 'Frequency' },
                 { key: 'nextDate', label: 'Next Charge', render: (row) => formatDisplayDate(row.nextDate) },
-                { key: 'type', label: 'Type' },
                 { key: 'method', label: 'Payment Method' },
                 { key: 'cardExpiry', label: 'Expires' },
               ]}

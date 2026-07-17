@@ -73,7 +73,7 @@ function NavLink({ item, activeTab, onNavigate }) {
   );
 }
 
-export default function PortalSidebar({ activeTab, onNavigate, isOpen, theme }) {
+export default function PortalSidebar({ activeTab, onNavigate, isOpen, theme, onContactSupport }) {
   return (
     <aside className={`portal-sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-brand">
@@ -109,10 +109,10 @@ export default function PortalSidebar({ activeTab, onNavigate, isOpen, theme }) 
             <Headphones size={20} className="sidebar-help-icon" />
             <h4>Need Help?</h4>
             <p>Our support team is here to help.</p>
-            <a href="mailto:info@chabadbedford.com" className="sidebar-help-link">
+            <button type="button" className="sidebar-help-link" onClick={onContactSupport} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
               Contact Support
               <ArrowRight size={14} />
-            </a>
+            </button>
           </div>
           <p className="sidebar-copyright">
             © {new Date().getFullYear()} Chabad Bedford. All rights reserved.

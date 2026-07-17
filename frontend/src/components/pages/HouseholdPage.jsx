@@ -100,7 +100,7 @@ export default function HouseholdPage({
             <UserPlus size={16} /> Add Family Members
           </button>
           <button type="button" className="dash-btn-gold" onClick={onDonate}>
-            <Lock size={16} /> Quick Payment
+            <Lock size={16} /> Outstanding Amount
           </button>
         </div>
       </div>
