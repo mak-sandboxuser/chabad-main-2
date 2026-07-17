@@ -2523,6 +2523,151 @@ app.post('/api/portal/update-profile', async (req, res) => {
   }
 });
 
+app.post('/api/household/update-member', async (req, res) => {
+  const auth = await resolveAuthedPortalMember(req);
+  if (auth.error) {
+    return res.status(auth.error.status).json({ error: auth.error.message, code: auth.error.code });
+  }
+
+  const {
+    contactId,
+    memberType,
+    groups,
+    email,
+    firstName,
+    lastName,
+    phone,
+    homePhone,
+    street,
+    city,
+    state,
+    postalCode,
+    country,
+    nickname,
+    title,
+    hebrewName,
+    fathersHebrewName,
+    mothersHebrewName,
+    jewish,
+    hebrewBirthdate,
+    nextHebrewBirthday,
+    weddingDate,
+    lifecycleStatus,
+    birthdate,
+    age,
+    gender,
+  } = req.body || {};
+
+  const targetContactId = sanitizeContactId(contactId);
+  if (!targetContactId?.startsWith('003')) {
+    return res.status(400).json({ error: 'A valid Salesforce Contact ID is required.' });
+  }
+
+  // Check if contact belongs to the authorized user's household
+  if (!auth.householdContactIds.includes(targetContactId)) {
+    return res.status(403).json({ error: 'You can only edit family members in your own household account.' });
+  }
+
+  // Validate member type changes
+  if (memberType) {
+    if (memberType === 'primary') {
+      if (auth.primaryContactId && auth.primaryContactId !== targetContactId) {
+        return res.status(400).json({ error: 'This household already has a Primary member. Please change their role first.' });
+      }
+    } else if (memberType === 'secondary') {
+      if (auth.secondaryContactId && auth.secondaryContactId !== targetContactId) {
+        return res.status(400).json({ error: 'This household already has a Secondary member. Please change their role first.' });
+      }
+    }
+  }
+
+  // Update contact details in Salesforce via MAKE_PROFILE_UPDATE_WEBHOOK_URL
+  if (process.env.MAKE_PROFILE_UPDATE_WEBHOOK_URL) {
+    console.log(`Triggering profile update for household member: ${targetContactId}`);
+    try {
+      const makeResponse = await fetch(process.env.MAKE_PROFILE_UPDATE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactId: targetContactId,
+          accountId: auth.accountId,
+          email,
+          firstName,
+          lastName,
+          phone,
+          mobile: phone,
+          homePhone: homePhone || phone,
+          street,
+          city,
+          state,
+          postalCode,
+          country,
+          nickname,
+          title,
+          hebrewName,
+          fathersHebrewName,
+          mothersHebrewName,
+          jewish,
+          hebrewBirthdate,
+          nextHebrewBirthday,
+          weddingDate,
+          lifecycleStatus,
+          birthdate,
+          age,
+          gender,
+        }),
+      });
+
+      if (makeResponse.ok) {
+        const makeText = await makeResponse.text();
+        console.log('Household member details profile update webhook response:', makeText);
+      } else {
+        console.error(`Household member profile update webhook failed with status ${makeResponse.status}`);
+      }
+    } catch (err) {
+      console.error('Error updating household member profile details:', err);
+    }
+  } else {
+    console.warn('MAKE_PROFILE_UPDATE_WEBHOOK_URL is not configured.');
+  }
+
+  // Update household role if it changed
+  const cached = userSalesforceData[auth.email] || {};
+  const contacts = cached.contacts || [];
+  const foundContact = contacts.find((c) => sanitizeContactId(c.contactId || c.id) === targetContactId);
+  const currentRole = foundContact
+    ? foundContact.isPrimary
+      ? 'primary'
+      : foundContact.isSecondary
+        ? 'secondary'
+        : 'child'
+    : 'child';
+
+  if (memberType && memberType !== currentRole) {
+    try {
+      console.log(`Updating role of household member ${targetContactId} from ${currentRole} to ${memberType}`);
+      await applyHouseholdRolesViaMake('', auth, [targetContactId], memberType);
+    } catch (err) {
+      console.error('Error updating household member role:', err);
+    }
+  }
+
+  // Refresh data from Salesforce
+  const refreshed = await buildPortalSfData(auth.email);
+  if (refreshed.error) {
+    return res.status(503).json({ error: 'Contact updated, but portal data could not be refreshed.' });
+  }
+
+  userSalesforceData[auth.email.toLowerCase()] = refreshed.sfData;
+
+  res.json({
+    success: true,
+    message: 'Household member updated successfully.',
+    sfData: refreshed.sfData,
+  });
+});
+
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'chabad-portal-api' });
 });

@@ -325,6 +325,7 @@ export default function Portal({ user, getAuthToken, onLogout }) {
             <MemberDetailsPage
               theme={theme}
               member={selectedMember}
+              user={user}
               sfData={sfData}
               getAuthToken={getAuthToken}
               onNavigate={handleNavigate}
