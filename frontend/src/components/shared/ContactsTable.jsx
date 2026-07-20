@@ -61,8 +61,6 @@ export default function ContactsTable({ contacts = [], onSelectContact }) {
             <thead>
               <tr>
                 <th className="crm-col-name">Related Person (Contact)</th>
-                <th className="crm-col-flag">Primary Member</th>
-                <th className="crm-col-flag">Secondary Member</th>
                 <th className="crm-col-role">Role</th>
                 <th className="crm-col-actions" aria-hidden="true" />
               </tr>
@@ -79,12 +77,7 @@ export default function ContactsTable({ contacts = [], onSelectContact }) {
                       {contact.name}
                     </button>
                   </td>
-                  <td className="crm-col-flag">
-                    <MemberFlag active={Boolean(contact.isPrimary)} />
-                  </td>
-                  <td className="crm-col-flag">
-                    <MemberFlag active={Boolean(contact.isSecondary)} />
-                  </td>
+
                   <td className="crm-col-role">{contact.role || '—'}</td>
                   <td className="crm-col-actions">
                     <button
