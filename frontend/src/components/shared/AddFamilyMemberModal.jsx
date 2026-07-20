@@ -341,7 +341,7 @@ export default function AddFamilyMemberModal({
         <div className="add-family-account-banner">
           <span className="add-family-account-label">Account</span>
           <strong>{accountName}</strong>
-          <span className="add-family-account-id">{householdAccountId || 'Account ID unavailable'}</span>
+
           {(primaryContact || secondaryContact) && (
             <div className="add-family-account-members">
               {primaryContact && <span>Primary: {primaryContact.name}</span>}
