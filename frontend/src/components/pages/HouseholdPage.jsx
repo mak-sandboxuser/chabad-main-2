@@ -132,10 +132,7 @@ export default function HouseholdPage({
                 <label className="profile-field-label">Household Total Members</label>
                 <div className="profile-field-box">{memberCount}</div>
               </div>
-              <div className="profile-field">
-                <label className="profile-field-label">Salesforce Account ID</label>
-                <div className="profile-field-box">{household.householdAccountId || '—'}</div>
-              </div>
+
             </div>
           )}
 
