@@ -162,7 +162,7 @@ export default function Login({ initialError = '' }) {
                   <span className="diamond">♦</span>
                 </div>
                 <p className="intro-text">
-                  Access your membership, contributions, household information, and billing—all in one secure place.
+                                   Access your membership, contributions, household information<br/> and billing—all in one secure place.
                 </p>
               </div>
 

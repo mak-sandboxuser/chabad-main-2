@@ -223,7 +223,7 @@ export default function Portal({ user, getAuthToken, onLogout }) {
               title="Notifications"
             >
               <Bell size={20} />
-              <span className="header-notif-badge">3</span>
+              {/* /<span className="header-notif-badge">3</span> */}
             </button>
             <button
               type="button"
