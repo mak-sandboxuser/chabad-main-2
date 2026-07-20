@@ -380,6 +380,15 @@ export default function DashboardHome({
         <div className="dash-balance-row">
           <div className="dash-balance-card glass-panel">
             <div className="dash-balance-header">
+              <div className="dash-balance-icon"><DollarSign size={16} /></div>
+              <span className="dash-stat-label">YTD</span>
+            </div>
+            <strong className="dash-balance-amount">$5846</strong>
+            <small className='fkchange'>Since 2023 To Till Date</small>
+
+          </div>
+          <div className="dash-balance-card glass-panel">
+            <div className="dash-balance-header">
               <div className="dash-balance-icon red"><DollarSign size={16} /></div>
               <span className="dash-stat-label">Outstanding Balance</span>
             </div>
@@ -400,15 +409,7 @@ export default function DashboardHome({
               <span className="dash-schedule-badge blue">{activeRecurring.frequency}</span>
             )}
           </div>
-          <div className="dash-balance-card glass-panel">
-            <div className="dash-balance-header">
-              <div className="dash-balance-icon red"><DollarSign size={16} /></div>
-              <span className="dash-stat-label">YTD</span>
-            </div>
-            <strong className="dash-balance-amount text-danger">{formatMoney(summary.outstanding)}</strong>
-            <small className='fkchange'>{activeRecurring?.nextDate ? `Due on ${formatDisplayDate(activeRecurring.nextDate)}` : 'No due date scheduled'}</small>
 
-          </div>
         </div>
 
         <div className="dash-panel glass-panel">
