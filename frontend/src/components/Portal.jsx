@@ -490,6 +490,7 @@ import FinancialsPage from './pages/FinancialsPage';
 import ContributionsPage from './pages/ContributionsPage';
 import ProfilePage from './pages/ProfilePage';
 import QuickPaymentModal from './shared/QuickPaymentModal';
+import ContactSupportModal from './shared/ContactSupportModal';
 import { showToast } from '../utils/toast';
 import { fetchPortalApi } from '../utils/portalApi';
 
@@ -548,6 +549,7 @@ export default function Portal({ user, getAuthToken, onLogout }) {
   
   const [sfData, setSfData] = useState(null);
   const [showDonateModal, setShowDonateModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
   const [paymentAlert, setPaymentAlert] = useState(null);
 
   const fetchDashboardData = async () => {
@@ -908,7 +910,7 @@ export default function Portal({ user, getAuthToken, onLogout }) {
                   <Headphones size={22} style={{ color: 'var(--color-accent)', marginBottom: '12px' }} />
                   <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px' }}>Contact Support</h3>
                   <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: 1.5 }}>We&apos;re here to help you with any questions about your account.</p>
-                  <a href="mailto:info@chabadbedford.com" className="btn btn-secondary" style={{ marginTop: '4px' }}>Get Help</a>
+                  <button type="button" className="btn btn-secondary" style={{ marginTop: '4px' }} onClick={() => setShowContactModal(true)}>Get Help</button>
                 </div>
               </div>
             </div>
@@ -933,6 +935,13 @@ export default function Portal({ user, getAuthToken, onLogout }) {
         getAuthToken={getAuthToken}
         sfData={sfData}
         onSuccess={fetchDashboardData}
+      />
+
+      <ContactSupportModal
+        open={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        user={user}
+        sfData={sfData}
       />
     </div>
   );

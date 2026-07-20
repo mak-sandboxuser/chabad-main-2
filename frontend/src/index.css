@@ -618,7 +618,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .light-theme .building-sketch--login {
-  opacity: 0.92;
+  opacity: 0.55;
 }
 
 :not(.light-theme) .building-sketch--login {
@@ -632,7 +632,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .light-theme .building-sketch {
-  opacity: 0.78;
+  opacity: 0.5;
   max-width: 540px;
 }
 
@@ -1147,7 +1147,7 @@ h1, h2, h3, h4, h5, h6 {
   gap: 10px;
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
-  min-height: 72px;
+  min-height: 88px;
 }
 
 .chabad-logo {
@@ -1172,9 +1172,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .chabad-logo--sidebar {
-  height: 44px;
+  height: 60px;
   width: auto;
-  max-width: 44px;
+  max-width: 60px;
   object-fit: contain;
   object-position: center;
 }
@@ -1614,7 +1614,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .light-theme .dash-welcome-sketch {
-  opacity: 0.62;
+  opacity: 0.4;
 }
 
 .dash-status-badge {
