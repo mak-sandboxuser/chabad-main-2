@@ -5,11 +5,19 @@ import {
 import { fetchPortalApi } from '../../utils/portalApi';
 import { showToast } from '../../utils/toast';
 
-const CONTRIBUTION_TYPES = [
-  { id: 'General Donation', label: 'General Donation' },
-  { id: 'Holiday Contribution', label: 'Holiday Contribution' },
-  { id: 'Sponsorship', label: 'Sponsorship' },
-];
+const FALLBACK_CONTRIBUTION_OPTIONS = {
+  types: [
+    {
+      id: 'Donation',
+      label: 'Donation',
+      subTypes: [
+        { id: 'General', label: 'General Donation' },
+        { id: 'Holiday', label: 'Holiday Contribution' },
+        { id: 'Sponsorship', label: 'Sponsorship' },
+      ],
+    },
+  ],
+};
 
 const DEDICATION_TYPES = [
   { id: 'In Honor Of', label: 'In Honor Of' },
@@ -36,7 +44,9 @@ export default function QuickPaymentModal({
   onSuccess,
 }) {
   const [billingMode, setBillingMode] = useState('one-time'); // 'one-time' or 'recurring'
-  const [contributionType, setContributionType] = useState('General Donation');
+  const [contributionOptions, setContributionOptions] = useState(FALLBACK_CONTRIBUTION_OPTIONS);
+  const [contributionType, setContributionType] = useState(FALLBACK_CONTRIBUTION_OPTIONS.types[0].id);
+  const [contributionSubType, setContributionSubType] = useState(FALLBACK_CONTRIBUTION_OPTIONS.types[0].subTypes[0].id);
   const [amount, setAmount] = useState('100.00');
   const [frequency, setFrequency] = useState('Monthly');
   const [startDate, setStartDate] = useState(todayIsoDate());
@@ -47,9 +57,8 @@ export default function QuickPaymentModal({
   const amountInputRef = useRef(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     setBillingMode('one-time');
-    setContributionType('General Donation');
     setAmount('100.00');
     setFrequency('Monthly');
     setStartDate(todayIsoDate());
@@ -57,9 +66,40 @@ export default function QuickPaymentModal({
     setDedicationName('');
     setNote('');
     setLoading(false);
-  }, [open]);
+
+    let cancelled = false;
+    fetchPortalApi('/api/payments/contribution-options', { getAuthToken })
+      .then((data) => {
+        if (cancelled) return;
+        const types = Array.isArray(data?.types) && data.types.length
+          ? data.types
+          : FALLBACK_CONTRIBUTION_OPTIONS.types;
+        setContributionOptions({ types });
+        setContributionType(types[0].id);
+        setContributionSubType(types[0].subTypes?.[0]?.id || '');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setContributionOptions(FALLBACK_CONTRIBUTION_OPTIONS);
+        setContributionType(FALLBACK_CONTRIBUTION_OPTIONS.types[0].id);
+        setContributionSubType(FALLBACK_CONTRIBUTION_OPTIONS.types[0].subTypes[0].id);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, getAuthToken]);
 
   if (!open) return null;
+
+  const activeType = contributionOptions.types.find((t) => t.id === contributionType) || contributionOptions.types[0];
+  const subTypeOptions = activeType?.subTypes || [];
+
+  const handleTypeChange = (newTypeId) => {
+    setContributionType(newTypeId);
+    const newType = contributionOptions.types.find((t) => t.id === newTypeId);
+    setContributionSubType(newType?.subTypes?.[0]?.id || '');
+  };
 
   const handleAmountPillClick = (val) => {
     if (val === 'Other') {
@@ -89,9 +129,9 @@ export default function QuickPaymentModal({
           email: user?.email,
           contactId: sfData?.contactId || '',
           accountId: sfData?.accountId || sfData?.account?.id || '',
-          purpose: contributionType,
-          paymentType: 'Donation',
-          subType: 'General',
+          purpose: subTypeOptions.find((s) => s.id === contributionSubType)?.label || activeType?.label || contributionType,
+          paymentType: contributionType,
+          subType: contributionSubType,
           memo: note || dedicationName ? `${dedicationType}: ${dedicationName}. Note: ${note}` : '',
           pledgeAmount: 0,
           paymentAmount: parsedAmount,
@@ -234,6 +274,14 @@ export default function QuickPaymentModal({
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         }
         .qc-field {
+          margin-bottom: 10px;
+        }
+        .qc-field-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        .qc-field-row .qc-field {
           margin-bottom: 10px;
         }
         .qc-label {
@@ -484,20 +532,38 @@ export default function QuickPaymentModal({
             </button>
           </div>
 
-          <div className="qc-field">
-            <label className="qc-label">Contribution Type</label>
-            <div className="qc-input-box">
-              <Gift size={15} className="qc-input-icon" />
-              <select
-                className="qc-select"
-                value={contributionType}
-                onChange={(e) => setContributionType(e.target.value)}
-              >
-                {CONTRIBUTION_TYPES.map((t) => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
-              </select>
-              <span className="qc-select-arrow">▼</span>
+          <div className="qc-field-row">
+            <div className="qc-field">
+              <label className="qc-label">Type</label>
+              <div className="qc-input-box">
+                <Gift size={15} className="qc-input-icon" />
+                <select
+                  className="qc-select"
+                  value={contributionType}
+                  onChange={(e) => handleTypeChange(e.target.value)}
+                >
+                  {contributionOptions.types.map((t) => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+                <span className="qc-select-arrow">▼</span>
+              </div>
+            </div>
+            <div className="qc-field">
+              <label className="qc-label">Sub-Type</label>
+              <div className="qc-input-box">
+                <Gift size={15} className="qc-input-icon" />
+                <select
+                  className="qc-select"
+                  value={contributionSubType}
+                  onChange={(e) => setContributionSubType(e.target.value)}
+                >
+                  {subTypeOptions.map((s) => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
+                </select>
+                <span className="qc-select-arrow">▼</span>
+              </div>
             </div>
           </div>
 

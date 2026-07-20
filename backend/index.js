@@ -1622,6 +1622,81 @@ async function triggerStripePaymentWebhook(payload) {
   return triggerFinancialWebhook(payload);
 }
 
+const FALLBACK_CONTRIBUTION_OPTIONS = {
+  types: [
+    {
+      id: 'Donation',
+      label: 'Donation',
+      subTypes: [
+        { id: 'General', label: 'General Donation' },
+        { id: 'Holiday', label: 'Holiday Contribution' },
+        { id: 'Sponsorship', label: 'Sponsorship' },
+      ],
+    },
+  ],
+};
+
+function normalizeContributionOptions(payload) {
+  const types = Array.isArray(payload?.types) ? payload.types : [];
+  const normalized = types
+    .map((t) => ({
+      id: t.id || t.value || t.name || t.label || '',
+      label: t.label || t.name || t.value || t.id || '',
+      subTypes: (Array.isArray(t.subTypes) ? t.subTypes : [])
+        .map((s) => ({
+          id: s.id || s.value || s.name || s.label || '',
+          label: s.label || s.name || s.value || s.id || '',
+        }))
+        .filter((s) => s.id),
+    }))
+    .filter((t) => t.id);
+
+  return normalized.length ? { types: normalized } : null;
+}
+
+async function fetchContributionOptions() {
+  const webhookUrl = process.env.MAKE_CONTRIBUTION_OPTIONS_WEBHOOK_URL;
+  if (!webhookUrl) {
+    return FALLBACK_CONTRIBUTION_OPTIONS;
+  }
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      console.error(`Make.com contribution-options webhook returned ${response.status}`);
+      return FALLBACK_CONTRIBUTION_OPTIONS;
+    }
+
+    const text = await response.text();
+    const payload = parseMakePayload(text);
+    return normalizeContributionOptions(payload) || FALLBACK_CONTRIBUTION_OPTIONS;
+  } catch (err) {
+    console.error('Error calling Make.com contribution-options webhook:', err);
+    return FALLBACK_CONTRIBUTION_OPTIONS;
+  }
+}
+
+app.get('/api/payments/contribution-options', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  try {
+    await verifyClerkSessionToken(authHeader.split(' ')[1]);
+    const options = await fetchContributionOptions();
+    res.json(options);
+  } catch (err) {
+    console.error('Error fetching contribution options:', err);
+    res.status(500).json(FALLBACK_CONTRIBUTION_OPTIONS);
+  }
+});
+
 app.post('/api/payments/quick-payment', async (req, res) => {
   const authHeader = req.headers.authorization;
   const body = req.body || {};
