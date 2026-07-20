@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import {
   Calendar, Shield, MessageSquare, Mail, Phone, MapPin,
-  Pencil, Home, ChevronRight, Trash2, User, ShieldCheck,
+  Pencil, Home, ChevronRight, Trash2, User, ShieldCheck, Heart
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
+import EditFamilyMemberModal from '../shared/EditFamilyMemberModal';
 import { fetchPortalApi } from '../../utils/portalApi';
 import { formatAddress, getInitials } from '../../utils/portalData';
+import {
+  displayValue,
+  formatProfileDisplayValue,
+  sfDataToProfileForm
+} from '../../utils/profileForm';
 
 export default function MemberDetailsPage({
   theme,
   member,
+  user,
   sfData,
   getAuthToken,
   onNavigate,
@@ -18,8 +25,36 @@ export default function MemberDetailsPage({
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const contactId = member?.contactId || member?.id;
+
+  const loadMemberDetails = async (isCancelled) => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await fetchPortalApi('/api/household/member-details', {
+        getAuthToken,
+        method: 'POST',
+        body: { contactId },
+      });
+      if (!isCancelled()) {
+        setDetails(data.member || null);
+        if (data.sfData) {
+          await onSfDataUpdate?.(data.sfData);
+        }
+      }
+    } catch (err) {
+      if (!isCancelled()) {
+        setError(err.message);
+        setDetails(null);
+      }
+    } finally {
+      if (!isCancelled()) {
+        setLoading(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!contactId?.startsWith('003')) {
@@ -28,46 +63,28 @@ export default function MemberDetailsPage({
     }
 
     let cancelled = false;
+    const isCancelled = () => cancelled;
 
-    const loadMemberDetails = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const data = await fetchPortalApi('/api/household/member-details', {
-          getAuthToken,
-          method: 'POST',
-          body: { contactId },
-        });
-        if (!cancelled) {
-          setDetails(data.member || null);
-          if (data.sfData) {
-            await onSfDataUpdate?.(data.sfData);
-          }
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message);
-          setDetails(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadMemberDetails();
+    loadMemberDetails(isCancelled);
 
     return () => {
       cancelled = true;
     };
   }, [contactId, getAuthToken]);
 
+  const handleRefresh = async () => {
+    if (contactId?.startsWith('003')) {
+      await loadMemberDetails(() => false);
+    }
+  };
+
   const accountName = sfData?.account?.name || sfData?.profile?.accountName || 'Household';
   const source = details || member || {};
+  const memberForm = sfDataToProfileForm(details || member, member?.email);
+
   const data = {
-    name: source.name || 'Member',
-    initials: getInitials(source.name),
+    name: source.name || [memberForm.firstName, memberForm.lastName].filter(Boolean).join(' ') || 'Member',
+    initials: getInitials(source.name || [memberForm.firstName, memberForm.lastName].filter(Boolean).join(' ')),
     relationship: source.role || 'Member',
     role: source.isPrimary
       ? 'Primary Member'
@@ -77,15 +94,6 @@ export default function MemberDetailsPage({
     roleDesc: source.isPrimary
       ? 'Primary household member with full portal access.'
       : 'Active household member linked to this account.',
-    email: source.email || sfData?.email || '—',
-    phone: source.phone || sfData?.profile?.phone || '—',
-    address: formatAddress({
-      street: source.street || sfData?.profile?.street,
-      city: source.city || sfData?.profile?.city,
-      state: source.state || sfData?.profile?.state,
-      postalCode: source.postalCode || sfData?.profile?.postalCode,
-      country: source.country || sfData?.profile?.country,
-    }) || '—',
     since: sfData?.membership?.memberSince || sfData?.joinedDate || '—',
     contactId: source.contactId || contactId || '—',
   };
@@ -119,9 +127,16 @@ export default function MemberDetailsPage({
           </div>
           <p className="member-since"><Calendar size={14} /> Member since {data.since}</p>
         </div>
-        <button type="button" className="dash-btn-outline" onClick={() => onNavigate('profile')}>
-          <Pencil size={16} /> View Profile
-        </button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <button type="button" className="dash-btn-outline" onClick={() => setShowEditModal(true)}>
+            <Pencil size={16} /> Edit Details
+          </button>
+          {contactId === sfData?.contactId && (
+            <button type="button" className="dash-btn-outline" onClick={() => onNavigate('profile')}>
+              <User size={16} /> View My Profile
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="member-household-link glass-panel">
@@ -135,36 +150,101 @@ export default function MemberDetailsPage({
         </button>
       </div>
 
-      <div className="member-details-card glass-panel">
-        <h3>Member Details</h3>
-        {[
-          { icon: User, label: 'Role', value: data.relationship },
-          { icon: Shield, label: 'Household Role', value: data.role, badge: true, sub: data.roleDesc },
-          { icon: MessageSquare, label: 'Salesforce Contact ID', value: data.contactId },
-          { icon: Mail, label: 'Email Address', value: data.email },
-          { icon: Phone, label: 'Mobile Number', value: data.phone },
-          { icon: MapPin, label: 'Mailing Address', value: data.address },
-        ].map((row) => {
-          const Icon = row.icon;
-          return (
-            <div key={row.label} className="member-detail-row">
-              <Icon size={18} />
-              <div className="member-detail-body">
-                <span>{row.label}</span>
-                {row.badge ? (
-                  <>
-                    <span className="badge badge-active">{row.value}</span>
-                    {row.sub && <small>{row.sub}</small>}
-                  </>
-                ) : (
-                  <strong>{row.value}</strong>
-                )}
-              </div>
+      {/* Section 1: General Details */}
+      <div className="member-details-card glass-panel" style={{ marginBottom: '24px', padding: '24px' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', fontSize: '18px', color: 'var(--color-primary)' }}>
+          <User size={20} /> General Details
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+          {[
+            { label: 'Salutation', value: memberForm.title },
+            { label: 'First Name', value: memberForm.firstName },
+            { label: 'Last Name', value: memberForm.lastName },
+            { label: 'Nickname', value: memberForm.nickname },
+            { label: 'Role in Household', value: data.relationship },
+            { label: 'Household Role', value: data.role, badge: true, sub: data.roleDesc },
+            { label: 'Salesforce Contact ID', value: data.contactId },
+            { label: 'Gender', value: memberForm.gender },
+          ].map((row) => (
+            <div key={row.label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>{row.label}</span>
+              {row.badge ? (
+                <div>
+                  <span className="badge badge-active" style={{ display: 'inline-block', marginBottom: '4px' }}>{row.value}</span>
+                  {row.sub && <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.3' }}>{row.sub}</p>}
+                </div>
+              ) : (
+                <strong style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '600' }}>{displayValue(row.value)}</strong>
+              )}
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
+      {/* Section 2: Contact & Address Details */}
+      <div className="member-details-card glass-panel" style={{ marginBottom: '24px', padding: '24px' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', fontSize: '18px', color: 'var(--color-primary)' }}>
+          <MapPin size={20} /> Contact & Address Details
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+          {[
+            { label: 'Email Address', value: memberForm.email },
+            { label: 'Mobile Number', value: memberForm.phone },
+            { label: 'Home Phone', value: memberForm.homePhone },
+            { label: 'Street Address', value: memberForm.street },
+            { label: 'City', value: memberForm.city },
+            { label: 'State', value: memberForm.state },
+            { label: 'Postal Code', value: memberForm.postalCode },
+            { label: 'Country', value: memberForm.country },
+          ].map((row) => (
+            <div key={row.label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>{row.label}</span>
+              <strong style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '600' }}>{displayValue(row.value)}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Section 3: Personal & Hebrew Details */}
+      <div className="member-details-card glass-panel" style={{ marginBottom: '24px', padding: '24px' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', fontSize: '18px', color: 'var(--color-primary)' }}>
+          <Heart size={20} /> Personal Information
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+          {[
+            { label: 'Hebrew Name', value: memberForm.hebrewName },
+            { label: "Father's Hebrew Name", value: memberForm.fathersHebrewName },
+            { label: "Mother's Hebrew Name", value: memberForm.mothersHebrewName },
+            { label: 'Jewish', value: memberForm.jewish },
+            { label: 'Birthdate (Civil)', value: formatProfileDisplayValue('birthdate', memberForm.birthdate) },
+            { label: 'Birthdate (Hebrew)', value: memberForm.hebrewBirthdate },
+            { label: 'Civil Date of Next Hebrew Birthday', value: formatProfileDisplayValue('nextHebrewBirthday', memberForm.nextHebrewBirthday) },
+            { label: 'Age', value: memberForm.age },
+            { label: 'Wedding Date', value: formatProfileDisplayValue('weddingDate', memberForm.weddingDate) },
+            { label: 'Status', value: memberForm.lifecycleStatus },
+          ].map((row) => (
+            <div key={row.label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>{row.label}</span>
+              <strong style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '600' }}>{displayValue(row.value)}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <EditFamilyMemberModal
+        open={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        member={details || member}
+        user={user}
+        getAuthToken={getAuthToken}
+        sfData={sfData}
+        onSuccess={async (nextSfData) => {
+          if (nextSfData) {
+            await onSfDataUpdate?.(nextSfData);
+          }
+          await handleRefresh();
+        }}
+      />
     </PortalPageLayout>
   );
 }

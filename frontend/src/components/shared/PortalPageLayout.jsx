@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Shield, ChevronRight } from 'lucide-react';
 import BuildingSketch from './BuildingSketch';
+import ContactSupportModal from './ContactSupportModal';
 
-export function PortalPageFooter() {
+export function PortalPageFooter({ onContactSupport }) {
   return (
     <footer className="portal-page-footer">
       <span>© {new Date().getFullYear()} Chabad Bedford. All rights reserved.</span>
@@ -11,7 +12,13 @@ export function PortalPageFooter() {
         <span>|</span>
         <a href="#">Terms of Service</a>
         <span>|</span>
-        <a href="mailto:info@chabadbedford.com">Contact Support</a>
+        <button
+          type="button"
+          onClick={onContactSupport}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', font: 'inherit', padding: 0 }}
+        >
+          Contact Support
+        </button>
       </div>
     </footer>
   );
@@ -24,7 +31,11 @@ export default function PortalPageLayout({
   breadcrumbs = [],
   showSketch = true,
   children,
+  user,
+  sfData,
 }) {
+  const [showContactModal, setShowContactModal] = useState(false);
+
   return (
     <div className="portal-page-layout">
       {breadcrumbs.length > 0 && (
@@ -66,7 +77,15 @@ export default function PortalPageLayout({
       </div>
 
       {children}
-      <PortalPageFooter />
+
+      <PortalPageFooter onContactSupport={() => setShowContactModal(true)} />
+
+      <ContactSupportModal
+        open={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        user={user}
+        sfData={sfData}
+      />
     </div>
   );
 }
