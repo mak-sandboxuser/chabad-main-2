@@ -122,22 +122,22 @@ export default function HouseholdPage({
                 <label className="profile-field-label">Account Name</label>
                 <div className="profile-field-box">{account.name}</div>
               </div>
-              {/* <div className="profile-field">
+              <div className="profile-field">
                 <label className="profile-field-label">Phone</label>
                 <div className="profile-field-box">{account.phone || '—'}</div>
-              </div> */}
+              </div>
               <div className="profile-field profile-field--full">
                 <label className="profile-field-label">Address</label>
                 <div className="profile-field-box">{formatAddress(account)}</div>
               </div>
-              {/* <div className="profile-field">
+              <div className="profile-field">
                 <label className="profile-field-label">Primary Contact</label>
                 <div className="profile-field-box">{primaryContact?.name || sfData?.name || '—'}</div>
-              </div> */}
-              {/* <div className="profile-field">
+              </div>
+              <div className="profile-field">
                 <label className="profile-field-label">Secondary Contact</label>
                 <div className="profile-field-box">{secondaryContact?.name || '—'}</div>
-              </div> */}
+              </div>
               <div className="profile-field">
                 <label className="profile-field-label">Household Total Members</label>
                 <div className="profile-field-box">{memberCount}</div>
