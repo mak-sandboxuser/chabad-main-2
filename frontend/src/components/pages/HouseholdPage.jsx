@@ -6,6 +6,7 @@ import PortalPageLayout from '../shared/PortalPageLayout';
 import SectionTabs from '../shared/SectionTabs';
 import ContactsTable from '../shared/ContactsTable';
 import AddFamilyMemberModal from '../shared/AddFamilyMemberModal';
+import EditFamilyMemberModal from '../shared/EditFamilyMemberModal';
 import { fetchPortalApi } from '../../utils/portalApi';
 import {
   formatAddress,
@@ -31,6 +32,7 @@ export default function HouseholdPage({
 }) {
   const [activeTab, setActiveTab] = useState('contacts');
   const [showAddFamilyModal, setShowAddFamilyModal] = useState(false);
+  const [editingMember, setEditingMember] = useState(null);
   const [householdLoading, setHouseholdLoading] = useState(false);
   const [householdError, setHouseholdError] = useState('');
 
@@ -74,8 +76,6 @@ export default function HouseholdPage({
   return (
     <PortalPageLayout
       theme={theme}
-      title={account.name}
-      subtitle="Household profile and contacts."
       breadcrumbs={[
         { label: 'Dashboard', onClick: () => onNavigate('dashboard') },
         { label: 'Household' },
@@ -100,7 +100,7 @@ export default function HouseholdPage({
             <UserPlus size={16} /> Add Family Members
           </button>
           <button type="button" className="dash-btn-gold" onClick={onDonate}>
-            <Lock size={16} /> Outstanding Amount
+            <Lock size={16} /> General Payment
           </button>
         </div>
       </div>
@@ -122,22 +122,19 @@ export default function HouseholdPage({
                 <label className="profile-field-label">Account Name</label>
                 <div className="profile-field-box">{account.name}</div>
               </div>
-
-              <div className="profile-field profile-field--full">
-                <label className="profile-field-label">Address</label>
-                <div className="profile-field-box">{formatAddress(account)}</div>
-              </div>
-
               <div className="profile-field">
                 <label className="profile-field-label">Household Total Members</label>
                 <div className="profile-field-box">{memberCount}</div>
               </div>
-
+              <div className="profile-field profile-field--full">
+                <label className="profile-field-label">Address</label>
+                <div className="profile-field-box">{formatAddress(account)}</div>
+              </div>
             </div>
           )}
 
           {activeTab === 'contacts' && (
-            <ContactsTable contacts={contacts} onSelectContact={onViewMember} />
+            <ContactsTable contacts={contacts} onSelectContact={(member) => setEditingMember(member)} />
           )}
         </div>
       </div>
@@ -156,6 +153,24 @@ export default function HouseholdPage({
           }
         }}
       />
+
+      {editingMember && (
+        <EditFamilyMemberModal
+          open={Boolean(editingMember)}
+          onClose={() => setEditingMember(null)}
+          member={editingMember}
+          user={user}
+          getAuthToken={getAuthToken}
+          sfData={sfData}
+          onSuccess={async (nextSfData) => {
+            if (nextSfData) {
+              await onHouseholdUpdated?.(nextSfData);
+            } else {
+              await onHouseholdUpdated?.();
+            }
+          }}
+        />
+      )}
     </PortalPageLayout>
   );
 }

@@ -92,11 +92,28 @@ export default function App() {
   const [restoringSession, setRestoringSession] = useState(false);
   const auth = getEffectiveAuthState(clerk, { isSignedIn, userId, isLoaded });
 
+  // Direct Salesforce Login Session (Bypassing Clerk)
+  const [sfUser, setSfUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('sf_user_session');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleSfLogout = () => {
+    localStorage.removeItem('sf_user_session');
+    setSfUser(null);
+    window.location.replace('/');
+  };
+
   useEffect(() => {
     if (!isLoaded) return;
 
     const route =
-      shouldRunEmailLinkVerifier() ? 'verify'
+      sfUser ? 'sf_dashboard'
+      : shouldRunEmailLinkVerifier() ? 'verify'
       : auth.authenticated ? 'dashboard'
       : restoringSession ? 'restoring_session'
       : 'login';
@@ -109,47 +126,26 @@ export default function App() {
       effectiveUserId: auth.effectiveUserId,
       restoringSession,
     });
-    authTraceClerkState(clerk, 'APP_CLERK_STATE');
-  }, [isLoaded, isSignedIn, userId, restoringSession, clerk, auth.authenticated, auth.clerkUserId, auth.effectiveUserId]);
+  }, [isLoaded, isSignedIn, userId, restoringSession, clerk, auth.authenticated, auth.clerkUserId, auth.effectiveUserId, sfUser]);
 
-  useEffect(() => {
-    if (shouldRunEmailLinkVerifier()) return;
-    if (!isLoaded || isSignedIn || userId || clerk.user?.id) return;
-
-    const sessionId = clerk.session?.id || clerk.client?.lastActiveSessionId;
-    if (!sessionId) return;
-
-    let cancelled = false;
-    setRestoringSession(true);
-    authTrace('APP_RESTORE_SESSION_START', { sessionId });
-
-    tryRestoreOrClearSession(clerk, signOut)
-      .then((result) => {
-        if (cancelled) return;
-        if (result === 'restored') {
-          authTrace('APP_RESTORE_SESSION_OK', { sessionId });
-        } else if (result === 'cleared') {
-          authTrace('APP_STALE_SESSION_CLEARED', { sessionId });
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        authTrace('APP_RESTORE_SESSION_FAIL', { sessionId, error: err.message });
-        console.error('Failed to restore Clerk session:', err);
-      })
-      .finally(() => {
-        if (!cancelled) setRestoringSession(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [clerk, isLoaded, isSignedIn, userId, signOut]);
-
-  const handleLogout = () => {
-    sessionStorage.removeItem(LOGIN_SUCCESS_FLAG);
-    signOut();
-  };
+  // If Direct Salesforce Login session exists, bypass Clerk authentication
+  if (sfUser) {
+    return (
+      <>
+        <ToastHost />
+        <Portal
+          user={{
+            id: sfUser.email,
+            email: sfUser.email,
+            name: sfUser.name,
+            role: 'Member',
+          }}
+          getAuthToken={async () => `dev:${sfUser.email}`}
+          onLogout={handleSfLogout}
+        />
+      </>
+    );
+  }
 
   if (shouldRunEmailLinkVerifier()) {
     return (
@@ -174,7 +170,10 @@ export default function App() {
       <>
         <ToastHost />
         <AuthenticatedPortal
-          onLogout={handleLogout}
+          onLogout={() => {
+            sessionStorage.removeItem(LOGIN_SUCCESS_FLAG);
+            signOut();
+          }}
           resolvedUserId={auth.effectiveUserId}
         />
       </>

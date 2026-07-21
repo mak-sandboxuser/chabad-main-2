@@ -13,6 +13,18 @@ export async function fetchPortalApi(path, {
 
   let token = await resolveToken();
   if (!token) {
+    try {
+      const stored = localStorage.getItem('sf_user_session');
+      if (stored) {
+        const sfUser = JSON.parse(stored);
+        token = `dev:${sfUser.email}`;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  if (!token) {
     throw new Error('Session expired. Please log in again.');
   }
 

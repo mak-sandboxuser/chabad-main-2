@@ -38,8 +38,6 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
   return (
     <PortalPageLayout
       theme={theme}
-      title="Financials"
-      subtitle="Payments, outstanding amounts, and recurring billing for your account."
       showSketch={false}
     >
       <div className="account-header-card glass-panel">
@@ -51,8 +49,8 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
           </div>
         </div>
         <div className="account-header-actions">
-          <button type="button" className="dash-btn-gold" onClick={onDonate}>
-            <Lock size={16} /> Outstanding Amount
+          <button type="button" className="dash-btn-gold" onClick={() => onDonate()}>
+            <Lock size={16} /> General Payment
           </button>
         </div>
       </div>
@@ -103,6 +101,80 @@ export default function FinancialsPage({ theme, sfData, onDonate, defaultTab = '
                 { key: 'paid', label: 'Paid' },
                 { key: 'name', label: 'Pledge' },
                 { key: 'date', label: 'Date', render: (row) => formatDisplayDate(row.date) },
+                {
+                  key: 'action',
+                  label: 'Action',
+                  render: (row) => {
+                    const outstandingVal = parseFloat(String(row.outstanding || '').replace(/[^0-9.-]/g, '')) || 0;
+                    if (outstandingVal <= 0) {
+                      return (
+                        <button
+                          type="button"
+                          className="dash-btn-gold"
+                          disabled
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '12px',
+                            minHeight: 'auto',
+                            opacity: 0.6,
+                            cursor: 'not-allowed',
+                          }}
+                        >
+                          Completed
+                        </button>
+                      );
+                    }
+
+                    const detectPaymentTypeAndSubType = (pledgeName = '') => {
+                      const name = pledgeName.trim().toLowerCase();
+                      if (name.includes('tuition')) {
+                        return { type: 'Payment', subType: 'Hebrew School Tuition' };
+                      }
+                      if (name.includes('event')) {
+                        return { type: 'Payment', subType: 'Event Registration' };
+                      }
+                      if (name.includes('camp')) {
+                        return { type: 'Payment', subType: 'Camp Bedford' };
+                      }
+                      if (name.includes('membership')) {
+                        return { type: 'Pledge', subType: 'Annual Membership' };
+                      }
+                      if (name.includes('building')) {
+                        return { type: 'Pledge', subType: 'Building Campaign' };
+                      }
+                      if (name.includes('capital')) {
+                        return { type: 'Pledge', subType: 'Capital Campaign' };
+                      }
+                      if (name.includes('holiday')) {
+                        return { type: 'Donation', subType: 'Holiday Contribution' };
+                      }
+                      if (name.includes('yizkor')) {
+                        return { type: 'Donation', subType: 'Yizkor' };
+                      }
+                      if (name.includes('chai')) {
+                        return { type: 'Donation', subType: 'Chai Club' };
+                      }
+                      return { type: 'Donation', subType: 'General Donation' };
+                    };
+
+                    const matched = detectPaymentTypeAndSubType(row.name);
+
+                    return (
+                      <button
+                        type="button"
+                        className="dash-btn-gold"
+                        style={{ padding: '4px 10px', fontSize: '12px', minHeight: 'auto' }}
+                        onClick={() => onDonate({
+                          amount: outstandingVal.toFixed(2),
+                          type: matched.type,
+                          subType: matched.subType,
+                        })}
+                      >
+                        Pay Now
+                      </button>
+                    );
+                  }
+                }
               ]}
             />
           )}

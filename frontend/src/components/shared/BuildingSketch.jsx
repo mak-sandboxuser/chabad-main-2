@@ -1,8 +1,7 @@
 export default function BuildingSketch({ theme, className = '' }) {
-  const src = theme === 'light' ? '/building-sketch-light.png' : '/building_sketch_clean.png';
   return (
     <img
-      src={src}
+      src="/building_sketch_clean.png"
       alt=""
       className={className}
       aria-hidden="true"

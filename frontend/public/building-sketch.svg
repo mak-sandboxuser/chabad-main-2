@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 280" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Left tree -->
+  <path d="M28 248 L28 195 M28 210 L12 185 M28 200 L44 178 M28 188 L8 168 M28 182 L48 165"/>
+  <path d="M18 248 Q28 235 38 248" stroke-width="1"/>
+  <!-- Right tree -->
+  <path d="M492 248 L492 198 M492 212 L476 188 M492 202 L508 180 M492 190 L472 172 M492 184 L512 168"/>
+  <path d="M482 248 Q492 235 502 248" stroke-width="1"/>
+  <!-- Ground -->
+  <path d="M0 252 L520 252" stroke-width="0.8" opacity="0.5"/>
+  <!-- Left wing -->
+  <rect x="52" y="188" width="72" height="64" rx="1"/>
+  <path d="M68 210 L68 228 M76 210 L76 228 M84 210 L84 228 M92 210 L92 228"/>
+  <path d="M52 188 L52 252 L124 252 L124 188"/>
+  <!-- Right wing -->
+  <rect x="396" y="188" width="72" height="64" rx="1"/>
+  <path d="M412 210 L412 228 M420 210 L420 228 M428 210 L428 228 M436 210 L436 228"/>
+  <path d="M396 188 L396 252 L468 252 L468 188"/>
+  <!-- Main pediment -->
+  <path d="M148 118 L260 68 L372 118 L372 252 L148 252 Z"/>
+  <path d="M158 118 L260 78 L362 118"/>
+  <!-- Columns -->
+  <path d="M168 252 L168 128 M178 252 L178 128"/>
+  <path d="M342 252 L342 128 M352 252 L352 128"/>
+  <path d="M218 252 L218 138 M228 252 L228 138"/>
+  <path d="M292 252 L292 138 M302 252 L302 138"/>
+  <!-- Column capitals -->
+  <path d="M164 128 L182 128 M214 138 L232 138 M288 138 L306 138 M338 128 L356 128"/>
+  <!-- Arched windows upper -->
+  <path d="M188 168 Q198 148 208 168 L208 198 L188 198 Z"/>
+  <path d="M312 168 Q322 148 332 168 L332 198 L312 198 Z"/>
+  <!-- Central arch door -->
+  <path d="M238 252 L238 178 Q260 148 282 178 L282 252"/>
+  <path d="M248 252 L248 185 Q260 168 272 185 L272 252"/>
+  <path d="M254 210 L266 210"/>
+  <!-- Steps -->
+  <path d="M228 252 L292 252 M224 256 L296 256 M220 260 L300 260"/>
+  <!-- Roof detail -->
+  <path d="M148 118 L372 118" stroke-width="1.5"/>
+  <!-- Shrubs -->
+  <path d="M110 252 Q118 242 126 252 M394 252 Q402 242 410 252" stroke-width="0.8" opacity="0.6"/>
+</svg>

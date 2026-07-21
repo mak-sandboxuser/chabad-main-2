@@ -301,10 +301,10 @@ export default function AddFamilyMemberModal({
         {parentCapacity.parentsFull
           ? ' Both parent slots are already filled — add new members as Child only.'
           : !parentCapacity.canAddPrimary && parentCapacity.canAddSecondary
-            ? ' Primary parent is already set — you can add Secondary or Child.'
+            ? ' Parent 1 is already set — you can add Parent 2 or Child.'
             : parentCapacity.canAddPrimary && !parentCapacity.canAddSecondary
-              ? ' Secondary parent is open — you can add Primary or Child.'
-              : ' You can add Primary, Secondary, or Child.'}
+              ? ' Parent 2 is open — you can add Parent 1 or Child.'
+              : ' You can add Parent 1, Parent 2, or Child.'}
       </p>
       {(availability.primary?.reason || availability.secondary?.reason) && (
         <p className="add-family-rules-note">
@@ -341,7 +341,6 @@ export default function AddFamilyMemberModal({
         <div className="add-family-account-banner">
           <span className="add-family-account-label">Account</span>
           <strong>{accountName}</strong>
-
           {(primaryContact || secondaryContact) && (
             <div className="add-family-account-members">
               {primaryContact && <span>Primary: {primaryContact.name}</span>}
@@ -574,17 +573,7 @@ export default function AddFamilyMemberModal({
               {renderParentRulesBanner(createTypeAvailability)}
               {renderMemberTypeToggle(form.memberType, (memberType) => setForm((prev) => ({ ...prev, memberType })), createTypeAvailability)}
 
-              <label className="profile-field-label">Select groups</label>
-              <div className="profile-field-box profile-field-box--editable">
-                <select
-                  className="profile-field-input profile-field-select"
-                  value={form.groups}
-                  onChange={(event) => setForm((prev) => ({ ...prev, groups: event.target.value }))}
-                >
-                  <option value="">Select a value</option>
-                  {HOUSEHOLD_GROUP_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-              </div>
+
 
               <div className="add-family-modal-footer">
                 <button type="button" className="dash-btn-outline" onClick={() => setStep('choose')}>

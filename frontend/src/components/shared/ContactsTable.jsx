@@ -1,17 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Search, ChevronDown, Check, User } from 'lucide-react';
-
-function MemberFlag({ active }) {
-  return (
-    <div className="crm-member-flag">
-      {active ? (
-        <span className="crm-member-flag-yes" aria-label="Yes">
-          <Check size={14} strokeWidth={3} />
-        </span>
-      ) : null}
-    </div>
-  );
-}
+import { Search, Edit, User } from 'lucide-react';
 
 export default function ContactsTable({ contacts = [], onSelectContact }) {
   const [search, setSearch] = useState('');
@@ -61,8 +49,9 @@ export default function ContactsTable({ contacts = [], onSelectContact }) {
             <thead>
               <tr>
                 <th className="crm-col-name">Related Person (Contact)</th>
+                <th className="crm-col-email" style={{ minWidth: '180px' }}>Email</th>
                 <th className="crm-col-role">Role</th>
-                <th className="crm-col-actions" aria-hidden="true" />
+                <th className="crm-col-actions" style={{ textAlign: 'center', width: '100px' }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -77,16 +66,32 @@ export default function ContactsTable({ contacts = [], onSelectContact }) {
                       {contact.name}
                     </button>
                   </td>
-
+                  <td className="crm-col-email" style={{ color: 'var(--text-secondary)' }}>
+                    {contact.email || '—'}
+                  </td>
                   <td className="crm-col-role">{contact.role || '—'}</td>
-                  <td className="crm-col-actions">
+                  <td className="crm-col-actions" style={{ textAlign: 'center' }}>
                     <button
                       type="button"
-                      className="crm-row-menu"
+                      className="dash-btn-icon-only"
                       onClick={() => onSelectContact?.(contact)}
-                      aria-label={`View ${contact.name}`}
+                      aria-label={`Edit ${contact.name}`}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--color-primary)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '6px',
+                        borderRadius: '4px',
+                        transition: 'background 0.2s',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
                     >
-                      <ChevronDown size={16} />
+                      <Edit size={16} />
                     </button>
                   </td>
                 </tr>

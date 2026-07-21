@@ -179,10 +179,10 @@ export default function EditFamilyMemberModal({
         {parentCapacity.parentsFull && currentRole === 'child'
           ? ' Both parent slots are already filled — cannot elevate role.'
           : !parentCapacity.canAddPrimary && parentCapacity.canAddSecondary && currentRole === 'child'
-            ? ' Primary parent slot is filled — you can set Secondary parent.'
+            ? ' Parent 1 slot is filled — you can set Parent 2.'
             : parentCapacity.canAddPrimary && !parentCapacity.canAddSecondary && currentRole === 'child'
-              ? ' Secondary parent slot is filled — you can set Primary parent.'
-              : ' You can set Primary, Secondary, or Child.'}
+              ? ' Parent 2 slot is filled — you can set Parent 1.'
+              : ' You can set Parent 1, Parent 2, or Child.'}
       </p>
     </div>
   );
@@ -215,7 +215,6 @@ export default function EditFamilyMemberModal({
         <div className="add-family-account-banner">
           <span className="add-family-account-label">Account</span>
           <strong>{accountName}</strong>
-          <span className="add-family-account-id">{householdAccountId || 'Account ID unavailable'}</span>
         </div>
 
         <div className="profile-tabs" role="tablist" style={{ marginBottom: '20px', borderBottom: '1px solid var(--border-color)' }}>
@@ -300,15 +299,7 @@ export default function EditFamilyMemberModal({
                   {renderMemberTypeToggle()}
                 </div>
 
-                <div className="profile-field" style={{ gridColumn: 'span 2' }}>
-                  <label className="profile-field-label">Select groups</label>
-                  <div className="profile-field-box profile-field-box--editable">
-                    <select className="profile-field-input profile-field-select" {...selectProps('groups')}>
-                      <option value="">Select a value</option>
-                      {HOUSEHOLD_GROUP_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
-                    </select>
-                  </div>
-                </div>
+
               </>
             )}
 
