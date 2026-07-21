@@ -79,14 +79,41 @@ export async function tryRestoreOrClearSession(clerk, signOut) {
   return 'cleared';
 }
 
+// export async function sendSignInMagicLink(signIn, email) {
+//   authTrace('MAGIC_LINK_SEND_START', { email, verifyUrl: getVerifyUrl() });
+//   const result = await signIn.emailLink.sendLink({
+//     emailAddress: email.trim().toLowerCase(),
+//     verificationUrl: getVerifyUrl(),
+//   });
+//   throwIfClerkError(result, 'Failed to send magic link.');
+//   authTrace('MAGIC_LINK_SEND_OK', { email });
+// }
+
 export async function sendSignInMagicLink(signIn, email) {
-  authTrace('MAGIC_LINK_SEND_START', { email, verifyUrl: getVerifyUrl() });
-  const result = await signIn.emailLink.sendLink({
-    emailAddress: email.trim().toLowerCase(),
-    verificationUrl: getVerifyUrl(),
+  authTrace('TEST_EMAIL_CODE_START', { email });
+
+  // Create sign-in attempt
+  await signIn.create({
+    identifier: email.trim().toLowerCase(),
   });
-  throwIfClerkError(result, 'Failed to send magic link.');
-  authTrace('MAGIC_LINK_SEND_OK', { email });
+
+  // Required even in testing mode
+  await signIn.emailCode.sendCode();
+
+  // Verify using Clerk test code
+  await signIn.emailCode.verifyCode({
+    code: '424242',
+  });
+
+  if (signIn.status !== 'complete') {
+    throw new Error('Sign in failed.');
+  }
+
+  authTrace('TEST_EMAIL_CODE_SUCCESS', {
+    sessionId: signIn.createdSessionId,
+  });
+
+  return signIn.createdSessionId;
 }
 
 export function readEmailLinkCallbackParams() {
