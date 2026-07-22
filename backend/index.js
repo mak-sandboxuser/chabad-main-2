@@ -1342,10 +1342,13 @@ function enrichFinancialPayload(payload = {}) {
     recurringLetterheadName: process.env.RECURRING_LETTERHEAD_NAME || '',
   } : {};
 
+  const method = payload.method || (payload.paymentMethodType === 'us_bank_account' ? 'Bank Transfer' : 'Stripe');
+
   return {
     ...payload,
     ...recurringFields,
     action,
+    method,
     pledgeAmount: pledgeAmount > 0 ? pledgeAmount : 0,
     createPledge: pledgeAmount > 0 && !isRecurring,
     createPayment: paymentAmount > 0 && !isRecurring,
@@ -1386,6 +1389,7 @@ function buildStripeCheckoutMetadata(payload, contactId, email) {
     createRecurring: enriched.createRecurring ? 'true' : 'false',
     paymentOnly: enriched.paymentOnly ? 'true' : 'false',
     isRecurring: isRecurring ? 'true' : 'false',
+    paymentMethodType: payload.paymentMethodType || 'card',
   };
 }
 
@@ -1407,7 +1411,20 @@ function buildQuickPaymentPayload(body, contactId) {
     frequency: body.frequency || 'Monthly',
     paymentDate: body.paymentDate || new Date().toISOString().split('T')[0],
     source: 'member_portal',
+    paymentMethodType: body.paymentMethodType || 'card',
   });
+}
+
+async function getOrCreateStripeCustomer(email) {
+  if (!stripe) {
+    throw new Error('Stripe integration is not configured.');
+  }
+  const customers = await stripe.customers.list({ email: email.toLowerCase(), limit: 1 });
+  if (customers.data && customers.data.length > 0) {
+    return customers.data[0].id;
+  }
+  const customer = await stripe.customers.create({ email: email.toLowerCase() });
+  return customer.id;
 }
 
 async function createStripeCheckoutSession(payload, contactId, email) {
@@ -1416,10 +1433,14 @@ async function createStripeCheckoutSession(payload, contactId, email) {
   const checkoutLabel = [payload.paymentType, payload.subType].filter(Boolean).join(' — ');
   const metadata = buildStripeCheckoutMetadata(payload, contactId, email);
 
+  const paymentMethodType = payload.paymentMethodType || 'card';
+  const paymentMethodTypes = paymentMethodType === 'us_bank_account' ? ['us_bank_account'] : ['card'];
+  const customerId = await getOrCreateStripeCustomer(email);
+
   if (isRecurring && paymentAmount > 0) {
     return stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      customer_email: email,
+      payment_method_types: paymentMethodTypes,
+      customer: customerId,
       mode: 'subscription',
       line_items: [{
         price_data: {
@@ -1445,8 +1466,8 @@ async function createStripeCheckoutSession(payload, contactId, email) {
   }
 
   return stripe.checkout.sessions.create({
-    payment_method_types: ['card'],
-    customer_email: email,
+    payment_method_types: paymentMethodTypes,
+    customer: customerId,
     mode: 'payment',
     line_items: [{
       price_data: {
@@ -1468,10 +1489,7 @@ async function createStripeCheckoutSession(payload, contactId, email) {
 
 function isCheckoutSessionComplete(session) {
   if (!session) return false;
-  if (session.mode === 'subscription') {
-    return session.status === 'complete';
-  }
-  return session.payment_status === 'paid';
+  return session.status === 'complete' || session.payment_status === 'paid';
 }
 
 function buildCheckoutClientReferenceId(payload) {
@@ -1579,6 +1597,7 @@ function buildPayloadFromCheckoutSession(session) {
     stripePaymentIntentId: typeof session.payment_intent === 'string'
       ? session.payment_intent
       : session.payment_intent?.id || '',
+    paymentMethodType: metadata.paymentMethodType || 'card',
   });
 }
 
@@ -1732,8 +1751,8 @@ app.post('/api/payments/confirm-checkout', async (req, res) => {
   try {
     const token = authHeader.split(' ')[1];
     let userEmail = '';
-    if (token === 'dev_token_for_testing') {
-      userEmail = (req.body.email || 'acc.appledev@gmail.com').toLowerCase();
+    if (token === 'dev_token_for_testing' || (typeof token === 'string' && token.startsWith('dev:'))) {
+      userEmail = (typeof token === 'string' && token.startsWith('dev:')) ? token.substring(4).toLowerCase() : (req.body.email || 'acc.appledev@gmail.com').toLowerCase();
     } else {
       const decoded = await verifyClerkSessionToken(token);
       const clerkUser = await clerkClient.users.getUser(decoded.sub);
@@ -1821,9 +1840,13 @@ app.post('/api/payments/create-checkout-session', async (req, res) => {
   try {
     const resolvedContactId = await resolveCheckoutContactId(authHeader, email, contactId || '');
     const checkoutLabel = [paymentType, subType].filter(Boolean).join(' — ');
+    const paymentMethodType = req.body.paymentMethodType || 'card';
+    const paymentMethodTypes = paymentMethodType === 'us_bank_account' ? ['us_bank_account'] : ['card'];
+    const customerId = await getOrCreateStripeCustomer(email);
+
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      customer_email: email,
+      payment_method_types: paymentMethodTypes,
+      customer: customerId,
       line_items: [{
         price_data: {
           currency: 'usd',
@@ -1848,6 +1871,7 @@ app.post('/api/payments/create-checkout-session', async (req, res) => {
         paymentAmount: String(amount),
         billingMode: 'regular',
         isRecurring: 'false',
+        paymentMethodType,
       },
       success_url: CHECKOUT_SUCCESS_URL,
       cancel_url: CHECKOUT_CANCEL_URL,

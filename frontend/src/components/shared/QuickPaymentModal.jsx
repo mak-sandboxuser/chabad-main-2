@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
-  X, Heart, Calendar, Gift, RefreshCw, Lock, Shield
+  X, Heart, Calendar, Gift, RefreshCw, Lock, Shield, CreditCard, Landmark
 } from 'lucide-react';
 import { fetchPortalApi } from '../../utils/portalApi';
 import { showToast } from '../../utils/toast';
@@ -68,6 +68,7 @@ export default function QuickPaymentModal({
   const [dedicationName, setDedicationName] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
+  const [paymentMethodType, setPaymentMethodType] = useState('card'); // 'card' or 'us_bank_account'
   const amountInputRef = useRef(null);
 
   useEffect(() => {
@@ -81,6 +82,7 @@ export default function QuickPaymentModal({
     setDedicationType('In Honor Of');
     setDedicationName('');
     setNote('');
+    setPaymentMethodType('card');
     setLoading(false);
   }, [open, defaultAmount, defaultType, defaultSubType, defaultBillingMode]);
 
@@ -131,6 +133,7 @@ export default function QuickPaymentModal({
           billingMode: billingMode === 'recurring' ? 'recurring' : 'regular',
           frequency: frequency,
           paymentDate: startDate,
+          paymentMethodType: paymentMethodType,
         },
       });
 
@@ -515,6 +518,26 @@ export default function QuickPaymentModal({
             >
               <Calendar size={13} /> Recurring
             </button>
+          </div>
+
+          <div className="qc-field" style={{ marginBottom: '12px' }}>
+            <label className="qc-label">Payment Method</label>
+            <div className="qc-toggle-group" style={{ marginBottom: '0' }}>
+              <button
+                type="button"
+                className={`qc-toggle-btn ${paymentMethodType === 'card' ? 'active' : ''}`}
+                onClick={() => setPaymentMethodType('card')}
+              >
+                <CreditCard size={13} /> Card
+              </button>
+              <button
+                type="button"
+                className={`qc-toggle-btn ${paymentMethodType === 'us_bank_account' ? 'active' : ''}`}
+                onClick={() => setPaymentMethodType('us_bank_account')}
+              >
+                <Landmark size={13} /> Bank Transfer
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '10px' }}>

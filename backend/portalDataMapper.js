@@ -372,6 +372,7 @@ function shouldIncludePaymentRecord(raw = {}, normalized = {}) {
 
   if (paymentType === 'cash' || method === 'cash') return true;
   if (method.includes('stripe')) return true;
+  if (method.includes('bank') || method.includes('transfer') || method.includes('ach')) return true;
   if (isSalesforcePaymentRecord(raw)) return true;
 
   return false;
@@ -502,7 +503,14 @@ function normalizePayment(raw = {}, index = 0) {
     subType: raw.subType || raw.subtype || raw.subTypeName || raw['Sub-Type'] || raw['Sub Type'] || '',
     method: raw.method || raw.paymentMethod || raw['Payment Method'] || raw['Payment Plan'] || raw.OneCRM__Payment_Type__c
       || (parseMoneyValue(raw.OneCRM__Paid__c ?? raw['Paid Amount']) > 0 ? 'Cash' : ''),
-    status: raw.status || raw.Status || raw['Processing Status'] || raw.OneCRM__Status__c || 'Paid',
+    status: (() => {
+      const s = raw.status || raw.Status || raw['Processing Status'] || raw.OneCRM__Status__c || 'Paid';
+      const sl = s.toLowerCase();
+      if (sl.includes('pending') || sl.includes('process') || sl.includes('unpaid') || sl.includes('hold')) {
+        return 'Pending';
+      }
+      return 'Paid';
+    })(),
   };
 }
 

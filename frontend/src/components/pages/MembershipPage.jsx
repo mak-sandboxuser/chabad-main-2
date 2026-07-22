@@ -2,7 +2,7 @@ import React from 'react';
 import {
   ShieldCheck, Calendar, CircleDollarSign, Gem,
   CreditCard, CheckCircle2, FileText, StickyNote, Heart,
-  Bell, Lock, Clock, Download, Settings, ChevronRight,
+  Bell, Lock, Clock, Download, Settings, ChevronRight, Landmark,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
 import { formatDisplayDate, getFinancialSummary, getMembership } from '../../utils/portalData';
@@ -19,12 +19,16 @@ export default function MembershipPage({ theme, sfData, onNavigate, onDonate }) 
     { label: 'Annual Commitment', value: membership.annualCommitment, sub: 'Per year', icon: CircleDollarSign },
   ];
 
+  const isBank = (membership.paymentMethod || '').toLowerCase().includes('bank') ||
+                 (membership.paymentMethod || '').toLowerCase().includes('ach') ||
+                 (membership.paymentMethod || '').toLowerCase().includes('transfer');
+
   const details = [
     {
-      icon: CreditCard,
+      icon: isBank ? Landmark : CreditCard,
       label: 'Payment Method',
       value: membership.paymentMethod,
-      sub: membership.paymentMethodExpiry ? `Expires ${membership.paymentMethodExpiry}` : null,
+      sub: isBank ? null : (membership.paymentMethodExpiry ? `Expires ${membership.paymentMethodExpiry}` : null),
       action: null,
     },
     {
