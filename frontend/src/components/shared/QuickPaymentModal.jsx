@@ -522,21 +522,31 @@ export default function QuickPaymentModal({
 
           <div className="qc-field" style={{ marginBottom: '12px' }}>
             <label className="qc-label">Payment Method</label>
-            <div className="qc-toggle-group" style={{ marginBottom: '0' }}>
-              <button
-                type="button"
-                className={`qc-toggle-btn ${paymentMethodType === 'card' ? 'active' : ''}`}
-                onClick={() => setPaymentMethodType('card')}
-              >
-                <CreditCard size={13} /> Card
-              </button>
-              <button
-                type="button"
-                className={`qc-toggle-btn ${paymentMethodType === 'us_bank_account' ? 'active' : ''}`}
-                onClick={() => setPaymentMethodType('us_bank_account')}
-              >
-                <Landmark size={13} /> Bank Transfer
-              </button>
+            <div style={{ display: 'flex', gap: '20px', marginTop: '6px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-primary)' }}>
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="card"
+                  checked={paymentMethodType === 'card'}
+                  onChange={() => setPaymentMethodType('card')}
+                  style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <CreditCard size={14} style={{ color: 'var(--color-primary)' }} />
+                Card
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: 'var(--text-primary)' }}>
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="us_bank_account"
+                  checked={paymentMethodType === 'us_bank_account'}
+                  onChange={() => setPaymentMethodType('us_bank_account')}
+                  style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <Landmark size={14} style={{ color: 'var(--color-primary)' }} />
+                Bank Transfer
+              </label>
             </div>
           </div>
 

@@ -155,6 +155,7 @@ export default function MembershipPage({ theme, sfData, getAuthToken, onHousehol
                     <th>Name</th>
                     <th>Email</th>
                     <th>Role</th>
+                    <th style={{ textAlign: 'center', width: '120px' }}>Edit Profile</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -166,12 +167,37 @@ export default function MembershipPage({ theme, sfData, getAuthToken, onHousehol
                           <td style={{ fontWeight: '500' }}>{contact.name}</td>
                           <td style={{ color: 'var(--text-secondary)' }}>{contact.email || '—'}</td>
                           <td>{displayRole}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              className="dash-btn-icon-only"
+                              onClick={() => setEditingMember(contact)}
+                              aria-label={`Edit ${contact.name}`}
+                              title="Edit Profile"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--color-primary)',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '6px',
+                                borderRadius: '4px',
+                                transition: 'background 0.2s',
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+                            >
+                              <Edit size={16} />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={3} className="portal-empty-table">
+                      <td colSpan={4} className="portal-empty-table">
                         No household contacts found.
                       </td>
                     </tr>

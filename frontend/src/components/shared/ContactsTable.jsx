@@ -51,7 +51,7 @@ export default function ContactsTable({ contacts = [], onSelectContact }) {
                 <th className="crm-col-name">Related Person (Contact)</th>
                 <th className="crm-col-email" style={{ minWidth: '180px' }}>Email</th>
                 <th className="crm-col-role">Role</th>
-                <th className="crm-col-actions" style={{ textAlign: 'center', width: '100px' }}>Action</th>
+                <th className="crm-col-actions" style={{ textAlign: 'center', width: '120px' }}>Edit Profile</th>
               </tr>
             </thead>
             <tbody>
