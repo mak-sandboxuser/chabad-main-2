@@ -109,9 +109,8 @@ export default function FinancialOverviewPage({ theme, sfData, onNavigate, onDon
           <div className="dash-panel glass-panel">
             <h3>My Account</h3>
             {[
-              ['Membership', membership.tier],
+              ['Group', membership.tier],
               ['Membership Status', membership.status, 'badge'],
-              ['Member Since', formatDisplayDate(membership.memberSince)],
               ['Renewal Date', formatDisplayDate(membership.renewalDate)],
               [`Household (${sfData?.contacts?.length || 1})`, account.name, 'link'],
             ].map(([label, val, type]) => (

@@ -314,6 +314,14 @@ export default function Portal({ user, getAuthToken, onLogout }) {
             <MembershipPage
               theme={theme}
               sfData={sfData}
+              getAuthToken={getAuthToken}
+              onHouseholdUpdated={async (nextSfData) => {
+                if (nextSfData) {
+                  setSfData(nextSfData);
+                } else {
+                  await fetchDashboardData();
+                }
+              }}
               onNavigate={handleNavigate}
               onDonate={handleOpenDonateModal}
             />

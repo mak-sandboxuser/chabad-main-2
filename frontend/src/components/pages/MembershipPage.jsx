@@ -1,48 +1,81 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   ShieldCheck, Calendar, CircleDollarSign, Gem,
-  CreditCard, CheckCircle2, FileText, StickyNote, Heart,
-  Bell, Lock, Clock, Download, Settings, ChevronRight, Landmark,
+  FileText, Users,
 } from 'lucide-react';
 import PortalPageLayout from '../shared/PortalPageLayout';
-import { formatDisplayDate, getFinancialSummary, getMembership } from '../../utils/portalData';
+import { fetchPortalApi } from '../../utils/portalApi';
+import { formatDisplayDate, getFinancialSummary, getMembership, getContacts } from '../../utils/portalData';
 
-export default function MembershipPage({ theme, sfData, onNavigate, onDonate }) {
+export default function MembershipPage({ theme, sfData, getAuthToken, onHouseholdUpdated, onNavigate, onDonate }) {
   const membership = getMembership(sfData);
   const summary = getFinancialSummary(sfData);
+  const contacts = getContacts(sfData);
+
+  useEffect(() => {
+    if (!getAuthToken) return;
+    let cancelled = false;
+
+    const loadHouseholdData = async () => {
+      try {
+        const data = await fetchPortalApi('/api/household/data', {
+          getAuthToken,
+          method: 'POST',
+        });
+        if (!cancelled && data.sfData) {
+          await onHouseholdUpdated?.(data.sfData);
+        }
+      } catch (err) {
+        // ignore background fetch errors
+      }
+    };
+
+    loadHouseholdData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getAuthToken, onHouseholdUpdated]);
+
+  const getDatesFromTier = (tierStr) => {
+    const raw = String(tierStr || '');
+    const match = raw.match(/(\d{2})[-/](\d{2})/);
+    if (match) {
+      const startYear = 2000 + parseInt(match[1], 10);
+      const endYear = 2000 + parseInt(match[2], 10);
+      return {
+        startDate: `1 September ${startYear}`,
+        endDate: `31 August ${endYear}`,
+      };
+    }
+    return {
+      startDate: membership.startDate ? formatDisplayDate(membership.startDate) : '1 September 2025',
+      endDate: membership.endDate ? formatDisplayDate(membership.endDate) : '31 August 2026',
+    };
+  };
+
+  const dates = getDatesFromTier(membership.tier);
 
   const stats = [
-    { label: 'Membership Tier', value: membership.tier || '—', sub: membership.status || '—', icon: Gem, badge: membership.tier || '—', badgeClass: 'blue' },
+    { label: 'Group', value: membership.tier || '—', sub: membership.status || '—', icon: Gem, badge: membership.tier || '—', badgeClass: 'blue' },
     { label: 'Status', value: membership.status, sub: 'In good standing', icon: ShieldCheck, valueClass: 'text-success' },
-    { label: 'Member Since', value: formatDisplayDate(membership.memberSince), sub: '', icon: Calendar },
-    { label: 'Renewal Date', value: formatDisplayDate(membership.renewalDate), sub: `${summary.outstanding > 0 ? `$${summary.outstanding.toFixed(2)} outstanding` : 'Up to date'}`, icon: Calendar, subClass: summary.outstanding > 0 ? 'text-warn' : '' },
-    { label: 'Annual Commitment', value: membership.annualCommitment, sub: 'Per year', icon: CircleDollarSign },
+    { label: 'Start Date', value: dates.startDate, sub: '1 September', icon: Calendar },
+    { label: 'End Date', value: dates.endDate, sub: '31 August', icon: Calendar },
   ];
 
-  const isBank = (membership.paymentMethod || '').toLowerCase().includes('bank') ||
-                 (membership.paymentMethod || '').toLowerCase().includes('ach') ||
-                 (membership.paymentMethod || '').toLowerCase().includes('transfer');
 
   const details = [
     {
-      icon: isBank ? Landmark : CreditCard,
-      label: 'Payment Method',
-      value: membership.paymentMethod,
-      sub: isBank ? null : (membership.paymentMethodExpiry ? `Expires ${membership.paymentMethodExpiry}` : null),
+      icon: Calendar,
+      label: 'Start Date',
+      value: dates.startDate,
+      sub: null,
       action: null,
     },
     {
-      icon: CheckCircle2,
-      label: 'Auto-Renewal',
-      value: membership.autoRenewal,
-      sub: membership.autoRenewal === 'Enabled' ? 'Your membership will renew automatically.' : 'Auto-renewal is not active.',
-      action: membership.autoRenewal === 'Enabled' ? 'Manage' : null,
-      valueClass: membership.autoRenewal === 'Enabled' ? 'text-success' : '',
-    },
-    {
-      icon: StickyNote,
-      label: 'Membership Notes',
-      value: membership.notes || 'No notes on file.',
+      icon: Calendar,
+      label: 'End Date',
+      value: dates.endDate,
       sub: null,
       action: null,
     },
@@ -59,7 +92,7 @@ export default function MembershipPage({ theme, sfData, onNavigate, onDonate }) 
   return (
     <PortalPageLayout
       theme={theme}
-      title={`${membership.tier} Membership`}
+      title={membership.tier?.toLowerCase().includes('membership') ? membership.tier : `${membership.tier} Membership`}
       subtitle="Thank you for your ongoing commitment to our community."
       breadcrumbs={[
         { label: 'Dashboard', onClick: () => onNavigate('dashboard') },
@@ -110,49 +143,44 @@ export default function MembershipPage({ theme, sfData, onNavigate, onDonate }) 
             })}
           </div>
 
-          <div className="membership-thanks-card glass-panel">
-            <Heart size={22} className="text-accent" />
-            <div>
-              <strong>Thank you for making a difference.</strong>
-              <p>Your membership helps strengthen Jewish life and community programs at Chabad Bedford.</p>
+          <div className="membership-details-card glass-panel" style={{ marginTop: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+              <Users size={20} className="text-accent" />
+              <h3 style={{ margin: 0 }}>Household Members</h3>
+            </div>
+            <div className="table-wrapper">
+              <table className="members-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.length > 0 ? (
+                    contacts.map((contact) => {
+                      const displayRole = contact.isPrimary || contact.isSecondary ? 'Parent' : (contact.role || 'Member');
+                      return (
+                        <tr key={contact.id || contact.contactId || contact.name}>
+                          <td style={{ fontWeight: '500' }}>{contact.name}</td>
+                          <td style={{ color: 'var(--text-secondary)' }}>{contact.email || '—'}</td>
+                          <td>{displayRole}</td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="portal-empty-table">
+                        No household contacts found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-
-        <aside className="membership-rail">
-          <div className="membership-renewal-card glass-panel">
-            <Bell size={20} className="text-accent" />
-            <p>Your membership will renew on <strong>{formatDisplayDate(membership.renewalDate)}</strong></p>
-            <span className="membership-renewal-amount">Annual Commitment: {membership.annualCommitment}</span>
-            <span className="membership-renewal-amount">Contributed: {membership.contributedYtd}</span>
-            <button type="button" className="dash-btn-gold full-width" onClick={onDonate}>
-              <Lock size={16} /> Make a Payment
-            </button>
-            <small className="stripe-note"><ShieldCheck size={12} /> Secure payments by Stripe</small>
-          </div>
-
-          <div className="dash-rail-card glass-panel">
-            <h3>Quick Actions</h3>
-            <ul className="dash-actions-list">
-              {[
-                { label: 'View Contribution History', sub: 'See your past contributions and payments', icon: Clock, tab: 'contributions' },
-                { label: 'View Financials', sub: 'Payments, outstanding amounts, and recurring billing', icon: Download, tab: 'financial' },
-                { label: 'Manage Renewal Preferences', sub: 'Update your renewal and payment settings', icon: Settings, tab: 'recurring' },
-              ].map(({ label, sub, icon: Icon, tab }) => (
-                <li key={label}>
-                  <button type="button" className="dash-action-btn stacked" onClick={() => onNavigate(tab)}>
-                    <Icon size={16} />
-                    <div>
-                      <span>{label}</span>
-                      <small>{sub}</small>
-                    </div>
-                    <ChevronRight size={16} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </aside>
       </div>
     </PortalPageLayout>
   );

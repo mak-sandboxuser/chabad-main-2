@@ -292,6 +292,15 @@ export default function EditFamilyMemberModal({
                     <input {...inputProps('homePhone', { type: 'tel' })} />
                   </div>
                 </div>
+                <div className="profile-field">
+                  <label className="profile-field-label">Group</label>
+                  <div className="profile-field-box profile-field-box--editable">
+                    <select {...selectProps('groups')}>
+                      <option value="">-- None --</option>
+                      {HOUSEHOLD_GROUP_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </div>
+                </div>
 
                 <div style={{ gridColumn: 'span 2', padding: '8px 0' }}>
                   <label className="profile-field-label">Relationship in household</label>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import BuildingSketch from './BuildingSketch';
 import ContactSupportModal from './ContactSupportModal';
 
@@ -67,14 +67,7 @@ export default function PortalPageLayout({
       </div>
       )}
 
-      <div className="portal-page-meta-bar">
-        <span className="portal-secure-badge">
-          <Shield size={14} />
-          Secure Member Portal
-        </span>
-        <span className="portal-meta-divider">|</span>
-        <span className="portal-meta-text">Last sign-in: Today at 9:15 AM</span>
-      </div>
+
 
       {children}
 

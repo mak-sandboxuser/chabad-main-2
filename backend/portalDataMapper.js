@@ -211,6 +211,7 @@ function normalizeContact(raw = {}, index = 0) {
     state: raw.state || raw.MailingState || raw['Mailing State'] || '',
     postalCode: raw.postalCode || raw.MailingPostalCode || raw['Mailing Postal Code'] || '',
     country: raw.country || raw.MailingCountry || raw['Mailing Country'] || '',
+    groups: raw.groups || raw.Groups || raw.OneCRM__Groups__c || raw.OneCRM__Group__c || raw.group || raw.Group || '',
   };
 }
 
@@ -638,7 +639,10 @@ function extractPortalDataFromPayload(payload, memberDetails = {}) {
       .map(normalizeRecurring)
       .filter((normalized, index) => shouldIncludeRecurringRecord(rawRecurring[index], normalized)),
   );
-  const membership = normalizeMembership(payload.membership);
+  const membership = normalizeMembership(payload.membership || (payload.groups || payload.Groups || payload.membershipTier ? {
+    tier: payload.groups || payload.Groups || payload.membershipTier,
+    status: 'Active'
+  } : null));
 
   const hasRemotePortalData = contacts.length
     || relationships.length

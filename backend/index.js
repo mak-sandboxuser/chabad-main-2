@@ -349,13 +349,25 @@ function deriveMembershipSummary(membership, financials, profile) {
   const annualFromPledges = pledges.reduce((sum, item) => sum + parseMoney(item.total || item.amount), 0);
   const activeRecurring = recurring.find((item) => (item.status || '').toLowerCase() === 'active') || recurring[0];
 
+  const derivedAutoRenewal = activeRecurring ? 'Enabled' : 'Disabled';
+  const derivedPaymentMethod = activeRecurring?.method || 'Cash';
+  const derivedPaymentMethodExpiry = activeRecurring?.cardExpiry || '';
+
   if (membership && Object.keys(membership).length) {
     const annual = parseMoney(membership.annualCommitment) || annualFromPledges;
     const contributed = paymentTotal || parseMoney(membership.contributedYtd);
     return {
-      ...membership,
+      tier: membership.tier || 'Member',
+      status: membership.status || profile?.lifecycleStatus || 'Active',
+      memberSince: membership.memberSince || '',
+      renewalDate: membership.renewalDate || activeRecurring?.nextDate || '',
+      annualCommitment: membership.annualCommitment || (annual ? formatMoney(annual) : '$0.00'),
       contributedYtd: formatMoney(contributed),
       outstanding: formatMoney(Math.max(annual - contributed, 0)),
+      autoRenewal: membership.autoRenewal || derivedAutoRenewal,
+      paymentMethod: membership.paymentMethod || derivedPaymentMethod,
+      paymentMethodExpiry: membership.paymentMethodExpiry || derivedPaymentMethodExpiry,
+      notes: membership.notes || '',
     };
   }
 
@@ -2672,6 +2684,7 @@ app.post('/api/household/update-member', async (req, res) => {
           birthdate,
           age,
           gender,
+          groups,
         }),
       });
 

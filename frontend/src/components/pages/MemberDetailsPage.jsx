@@ -125,7 +125,6 @@ export default function MemberDetailsPage({
             <span className="role-badge blue"><User size={12} /> {data.relationship}</span>
             <span className="badge badge-active"><ShieldCheck size={12} /> Active Member</span>
           </div>
-          <p className="member-since"><Calendar size={14} /> Member since {data.since}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button type="button" className="dash-btn-outline" onClick={() => setShowEditModal(true)}>

@@ -567,6 +567,19 @@ export default function AddFamilyMemberModal({
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="profile-field-label">Group</label>
+                  <div className="profile-field-box profile-field-box--editable">
+                    <select
+                      className="profile-field-input profile-field-select"
+                      value={form.groups}
+                      onChange={(event) => setForm((prev) => ({ ...prev, groups: event.target.value }))}
+                    >
+                      <option value="">-- None --</option>
+                      {HOUSEHOLD_GROUP_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
 
               <label className="profile-field-label">Relationship in household</label>
